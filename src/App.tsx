@@ -654,7 +654,7 @@ export default function App() {
         publicProfile: cachedWorkspace?.profile?.publicProfile ?? defaultWorkspace.profile.publicProfile,
         publicFavourites: cachedWorkspace?.profile?.publicFavourites ?? defaultWorkspace.profile.publicFavourites,
       },
-      manualImports: (cachedWorkspace?.manualImports as Gif[] | undefined) ?? favourites.filter((gif) => gif.username === 'manual-import'),
+      manualImports: (cachedWorkspace?.manualImports as Gif[] | undefined) ?? [],
     };
 
     setWorkspace(nextWorkspace);
@@ -663,7 +663,7 @@ export default function App() {
     setWorkspaceOffline(false);
     setLastSyncAt(new Date().toISOString());
     setWorkspaceLoading(false);
-  }, [user, favourites, route]);
+  }, [user, route]);
 
   const saveProfile = useCallback(async (profile: ProfileSettings) => {
     if (!user) return;
