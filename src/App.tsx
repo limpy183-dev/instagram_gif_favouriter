@@ -516,8 +516,10 @@ export default function App() {
   const [giphyUsage, setGiphyUsage] = useState<GiphyUsage>(readGiphyUsage());
   const inputRef = useRef<HTMLInputElement>(null);
   const syncPanelRef = useRef<HTMLDivElement>(null);
+  const initialFetchDoneRef = useRef(false);
 
-  const route = useMemo(parseHashRoute, [window.location.hash]);
+  const [routeHash, setRouteHash] = useState(window.location.hash);
+  const route = useMemo(() => parseHashRoute(), [routeHash]);
 
   const showToast = (message: string, type: ToastProps['type'] = 'success') => {
     setToast({ message, type, visible: true });
@@ -823,7 +825,10 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (user) fetchGifs('', '', 0);
+    if (user && !initialFetchDoneRef.current) {
+      initialFetchDoneRef.current = true;
+      fetchGifs('', '', 0);
+    }
   }, [user, fetchGifs]);
 
   useEffect(() => {
@@ -866,6 +871,7 @@ export default function App() {
 
   useEffect(() => {
     const handleHashChange = () => {
+      setRouteHash(window.location.hash);
       const nextRoute = parseHashRoute();
       if (nextRoute.type === 'public-collection') {
         void loadPublicCollection(nextRoute.id);
@@ -888,6 +894,20 @@ export default function App() {
     handleHashChange();
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, [loadPublicCollection, loadPublicUser]);
+
+  // Prevent GIF refetching on tab focus (alt-tab)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      // When user comes back to the tab, don't refetch GIFs
+      // Just mark that we're visible again
+      if (!document.hidden) {
+        // Optional: refresh data silently in background without showing loading state
+        // void refreshDataSilently();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, []);
 
   useEffect(() => {
     const handlePointerDown = (event: MouseEvent) => {
@@ -1112,6 +1132,7 @@ export default function App() {
     setSelectedGif(null);
     setPublicCollection(null);
     setPublicCollectionGifs([]);
+    initialFetchDoneRef.current = false;
     showToast('Signed out successfully', 'info');
   };
 

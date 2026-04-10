@@ -31,10 +31,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
       // Ignore background token refreshes so tab focus does not remount the app state.
       if (event === 'TOKEN_REFRESHED') return;
-      setSession(session);
+      // Ignore if the session is the same (prevents re-renders on tab focus)
+      setSession((currentSession) => {
+        if (currentSession?.user?.id === newSession?.user?.id) {
+          return currentSession;
+        }
+        return newSession;
+      });
       setLoading(false);
     });
 
