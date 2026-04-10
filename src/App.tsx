@@ -388,6 +388,8 @@ function parseHashRoute() {
   const hash = window.location.hash.replace(/^#/, '');
   if (hash.startsWith('/collections/')) return { type: 'public-collection' as const, id: hash.replace('/collections/', '') };
   if (hash.startsWith('/users/')) return { type: 'public-user' as const, id: hash.replace('/users/', '') };
+  if (hash.startsWith('/page/')) return { type: 'page' as const, id: hash.replace('/page/', '') as Page };
+  if (['/discover', '/favourites', '/toolbox', '/users', '/profile'].includes(hash)) return { type: 'page' as const, id: hash.replace('/', '') as Page };
   return { type: 'app' as const, id: '' };
 }
 
@@ -782,6 +784,9 @@ export default function App() {
         void loadPublicUser(nextRoute.id);
         return;
       }
+      if (nextRoute.type === 'page') {
+        setPage(nextRoute.id);
+      }
       setPublicCollection(null);
       setPublicCollectionGifs([]);
       setSelectedUserProfile(null);
@@ -994,6 +999,11 @@ export default function App() {
 
   const aiSuggestions = useMemo(() => searchQuery.trim() ? [`${searchQuery.toLowerCase()} reaction gif`, `${searchQuery.toLowerCase()} meme response`, `${searchQuery.toLowerCase()} dramatic reaction`] : [], [searchQuery]);
 
+  const navigateToPage = (nextPage: Page) => {
+    setPage(nextPage);
+    window.location.hash = `#/${nextPage}`;
+  };
+
   if (authLoading) return <div className="min-h-screen bg-zinc-950 flex items-center justify-center"><div className="flex flex-col items-center gap-4 text-zinc-400"><div className="w-10 h-10 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" /><p className="text-sm">Loading your session...</p></div></div>;
 
   if (route.type === 'public-collection') {
@@ -1024,7 +1034,7 @@ export default function App() {
                 {showSyncDetails && <div className="absolute right-0 top-full mt-2 w-72 rounded-2xl border border-white/10 bg-zinc-900/95 p-4 text-xs shadow-2xl backdrop-blur-xl z-50"><p className="text-white font-semibold mb-3">Sync details</p><div className="space-y-2"><div className="flex items-center justify-between gap-3"><span className="text-zinc-400">Favourites</span><span className={favouritesOffline ? 'text-amber-300' : 'text-emerald-300'}>{favouritesOffline ? 'Cached' : 'Live'}</span></div><div className="flex items-center justify-between gap-3"><span className="text-zinc-400">Collections</span><span className={workspaceOffline ? 'text-amber-300' : 'text-emerald-300'}>{workspaceOffline ? 'Cached' : 'Live'}</span></div><div className="flex items-center justify-between gap-3"><span className="text-zinc-400">Metadata</span><span className={workspaceOffline ? 'text-amber-300' : 'text-emerald-300'}>{workspaceOffline ? 'Cached' : 'Live'}</span></div><div className="flex items-center justify-between gap-3"><span className="text-zinc-400">History</span><span className={workspaceOffline ? 'text-amber-300' : 'text-emerald-300'}>{workspaceOffline ? 'Cached' : 'Live'}</span></div><div className="flex items-center justify-between gap-3"><span className="text-zinc-400">Profile</span><span className={workspaceOffline ? 'text-amber-300' : 'text-emerald-300'}>{workspaceOffline ? 'Cached' : 'Live'}</span></div></div><div className="mt-3 flex items-center justify-between gap-3"><span className="text-zinc-500">Last sync</span><span className="text-zinc-300">{lastSyncAt ? new Date(lastSyncAt).toLocaleTimeString() : 'Not yet'}</span></div><p className="text-zinc-500 mt-3 leading-relaxed">Cached data appears when Supabase is unavailable. Live mode means the app is currently reading from Supabase.</p><button type="button" onClick={() => { void retrySync(); }} disabled={retryingSync} className="secondary-btn w-full mt-3 disabled:opacity-60 disabled:cursor-not-allowed">{retryingSync ? <><span className="inline-block h-3.5 w-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" />Retrying...</> : 'Retry sync now'}</button></div>}
               </div>
               <nav className="flex items-center gap-1.5 bg-zinc-900 border border-white/10 rounded-2xl p-1 flex-wrap">
-                {(['discover', 'favourites', 'toolbox', 'users', 'profile'] as Page[]).map((item) => <button key={item} onClick={() => setPage(item)} className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all duration-200 ${page === item ? 'bg-gradient-to-r from-violet-600 to-pink-600 text-white shadow-lg shadow-violet-500/20' : 'text-zinc-400 hover:text-white hover:bg-white/5'}`}>{item === 'discover' && <DiscoverIcon />}{item === 'favourites' && <FavouriteNavIcon />}{item === 'users' && <UsersIcon />}<span className="capitalize">{item}</span></button>)}
+                {(['discover', 'favourites', 'toolbox', 'users', 'profile'] as Page[]).map((item) => <button key={item} onClick={() => navigateToPage(item)} className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all duration-200 ${page === item ? 'bg-gradient-to-r from-violet-600 to-pink-600 text-white shadow-lg shadow-violet-500/20' : 'text-zinc-400 hover:text-white hover:bg-white/5'}`}>{item === 'discover' && <DiscoverIcon />}{item === 'favourites' && <FavouriteNavIcon />}{item === 'users' && <UsersIcon />}<span className="capitalize">{item}</span></button>)}
               </nav>
               <div className="flex items-center gap-3 bg-zinc-900 border border-white/10 rounded-2xl px-3 py-2.5 min-w-[240px] max-w-full">
                 <div className="w-10 h-10 rounded-full bg-white/5 border border-white/10 overflow-hidden flex items-center justify-center text-xs font-bold text-white">{workspace.profile.avatarUrl ? <img src={workspace.profile.avatarUrl} alt="avatar" className="w-full h-full object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} /> : (workspace.profile.displayName || user.email || 'U').slice(0, 2).toUpperCase()}</div>
@@ -1043,7 +1053,7 @@ export default function App() {
         {(workspaceLoading || favouritesLoading) && <div className="masonry-grid">{Array.from({ length: 8 }).map((_, index) => <SkeletonCard key={index} height={[160, 200, 140, 220, 180][index % 5]} />)}</div>}
         {!workspaceLoading && page === 'discover' && <DiscoverPage currentLabel={currentLabel} analytics={analytics} loading={loading} gifs={gifs} hasMore={hasMore} loadingMore={loadingMore} fetchGifs={fetchGifs} searchQuery={searchQuery} activeCategory={activeCategory} offset={offset} addHistory={addHistory} isFavourited={isFavourited} handleToggleFavourite={handleToggleFavourite} workspace={workspace} isQueued={isQueued} handleQueueToggle={handleQueueToggle} recentHistory={recentHistory} manualImportTitle={manualImportTitle} setManualImportTitle={setManualImportTitle} manualImportUrl={manualImportUrl} setManualImportUrl={setManualImportUrl} importExternalGif={importExternalGif} />}
         {!workspaceLoading && page === 'favourites' && <FavouritesPage favouriteSearch={favouriteSearch} setFavouriteSearch={setFavouriteSearch} filterCollectionId={filterCollectionId} setFilterCollectionId={setFilterCollectionId} filterTag={filterTag} setFilterTag={setFilterTag} filterRating={filterRating} setFilterRating={setFilterRating} filterUsername={filterUsername} setFilterUsername={setFilterUsername} workspace={workspace} allTags={allTags} allUsernames={allUsernames} filteredFavourites={filteredFavourites} queuedGifs={queuedGifs} handleClearAll={handleClearAll} addHistory={addHistory} handleToggleFavourite={handleToggleFavourite} isQueued={isQueued} handleQueueToggle={handleQueueToggle} addGifToCollection={addGifToCollection} newCollectionName={newCollectionName} setNewCollectionName={setNewCollectionName} newCollectionDescription={newCollectionDescription} setNewCollectionDescription={setNewCollectionDescription} newCollectionPublic={newCollectionPublic} setNewCollectionPublic={setNewCollectionPublic} addCollection={addCollection} updateCollectionVisibility={updateCollectionVisibility} reorderQueue={reorderQueue} handleCopy={handleCopy} />}
-        {!workspaceLoading && page === 'toolbox' && <ToolboxPage publicCollections={publicCollections} workspace={workspace} analytics={analytics} updateProfileField={updateProfileField} setPage={setPage} handleCopy={handleCopy} />}
+        {!workspaceLoading && page === 'toolbox' && <ToolboxPage publicCollections={publicCollections} workspace={workspace} analytics={analytics} updateProfileField={updateProfileField} setPage={navigateToPage} handleCopy={handleCopy} />}
         {!workspaceLoading && page === 'users' && <UsersPage userSearch={userSearch} setUserSearch={setUserSearch} userSearchLoading={userSearchLoading} searchUsers={searchUsers} userResults={userResults} selectedUserProfile={selectedUserProfile} selectedUserCollections={selectedUserCollections} selectedUserFavourites={selectedUserFavourites} selectedUserLoading={selectedUserLoading} loadPublicUser={loadPublicUser} />}
         {!workspaceLoading && page === 'profile' && <ProfilePage workspace={workspace} updateProfileField={updateProfileField} user={user} gifMap={gifMap} />}
       </main>

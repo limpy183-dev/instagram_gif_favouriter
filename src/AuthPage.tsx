@@ -57,8 +57,13 @@ export default function AuthPage() {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+  const [showResendEmail, setShowResendEmail] = useState(false);
 
-  const clearMessages = () => { setError(''); setSuccessMsg(''); };
+  const clearMessages = () => {
+    setError('');
+    setSuccessMsg('');
+    setShowResendEmail(false);
+  };
 
   function getAuthErrorMessage(message: string, currentMode: Mode) {
     const normalized = message.toLowerCase();
@@ -68,13 +73,21 @@ export default function AuthPage() {
     }
 
     if (normalized.includes('invalid login credentials')) {
-      return currentMode === 'login'
-        ? 'Invalid email or password. If you just signed up, confirm your email first before signing in.'
-        : message;
+      if (currentMode === 'login') {
+        setShowResendEmail(true);
+        return 'Invalid email or password. If you just signed up, confirm your email first before signing in.';
+      }
+      return message;
     }
 
     if (normalized.includes('user already registered')) {
+      setShowResendEmail(true);
       return 'This email is already registered. If you have not confirmed it yet, check your inbox for the confirmation email or use Forgot password.';
+    }
+
+    if (normalized.includes('email not confirmed')) {
+      setShowResendEmail(true);
+      return 'Your account exists but your email is not confirmed yet. Check your inbox and spam folder for the confirmation email.';
     }
 
     return message;
@@ -225,7 +238,18 @@ export default function AuthPage() {
           {/* Error / success messages */}
           {error && (
             <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-sm px-4 py-3 rounded-xl mb-4">
-              {error}
+              <div className="space-y-3">
+                <div>{error}</div>
+                {showResendEmail && mode === 'login' && (
+                  <button
+                    type="button"
+                    onClick={() => { void resendConfirmationEmail(); }}
+                    className="secondary-btn text-xs"
+                  >
+                    Resend Email
+                  </button>
+                )}
+              </div>
             </div>
           )}
           {successMsg && (
