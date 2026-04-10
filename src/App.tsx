@@ -8,7 +8,14 @@ import { ToolboxPage } from './pages/ToolboxPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { UsersPage } from './pages/UsersPage';
 
-const API_KEY = (import.meta.env.VITE_GIPHY_API_KEY as string | undefined) ?? 'xi7X7aEg9CRosfoYoIJ1JmztL9J9lNBX';
+const GIPHY_KEYS = [
+  import.meta.env.VITE_GIPHY_API_KEY_1 as string | undefined,
+  import.meta.env.VITE_GIPHY_API_KEY_2 as string | undefined,
+  import.meta.env.VITE_GIPHY_API_KEY_3 as string | undefined,
+  import.meta.env.VITE_GIPHY_API_KEY_4 as string | undefined,
+  import.meta.env.VITE_GIPHY_API_KEY as string | undefined,
+  'xi7X7aEg9CRosfoYoIJ1JmztL9J9lNBX',
+].filter((key): key is string => Boolean(key));
 const LIMIT = 24;
 const LEGACY_FAVOURITES_KEY = 'gif_studio_favourites';
 const MIGRATION_FLAG_KEY = 'gif_studio_favourites_migrated';
@@ -437,6 +444,27 @@ function writeGiphyUsage(usage: GiphyUsage) {
   localStorage.setItem(GIPHY_USAGE_KEY, JSON.stringify(usage));
 }
 
+async function fetchGifData(endpointFactory: (apiKey: string) => string) {
+  let lastError: unknown = null;
+
+  for (const apiKey of GIPHY_KEYS) {
+    try {
+      const response = await fetch(endpointFactory(apiKey));
+      if (response.ok) {
+        return { response, apiKey } as const;
+      }
+      if (response.status !== 429 && response.status !== 403) {
+        return { response, apiKey } as const;
+      }
+      lastError = new Error(`Giphy responded with ${response.status}`);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error('All Giphy keys failed');
+}
+
 function getPreferredPage(route: ReturnType<typeof parseHashRoute>, fallbackPage: Page): Page {
   if (route.type === 'page') return route.id;
   return fallbackPage;
@@ -501,9 +529,10 @@ export default function App() {
     else setLoadingMore(true);
     const moodKeywords = moodFilter !== 'all' ? MOOD_PRESETS.find((item) => item.value === moodFilter)?.keywords.join(' ') ?? '' : '';
     const searchTerm = [query || cat, moodKeywords].filter(Boolean).join(' ').trim();
-    const endpoint = searchTerm ? `https://api.giphy.com/v1/gifs/search?api_key=${API_KEY}&q=${encodeURIComponent(searchTerm)}&limit=${LIMIT}&offset=${newOffset}` : `https://api.giphy.com/v1/gifs/trending?api_key=${API_KEY}&limit=${LIMIT}&offset=${newOffset}`;
     try {
-      const response = await fetch(endpoint);
+      const { response, apiKey } = await fetchGifData((apiKey) => searchTerm
+        ? `https://api.giphy.com/v1/gifs/search?api_key=${apiKey}&q=${encodeURIComponent(searchTerm)}&limit=${LIMIT}&offset=${newOffset}`
+        : `https://api.giphy.com/v1/gifs/trending?api_key=${apiKey}&limit=${LIMIT}&offset=${newOffset}`);
       const currentUsage = readGiphyUsage();
       const nextUsage: GiphyUsage = {
         hourKey: currentUsage.hourKey,
@@ -518,19 +547,20 @@ export default function App() {
         const failedUsage = { ...nextUsage, lastError: `Giphy request failed with status ${response.status}` };
         writeGiphyUsage(failedUsage);
         setGiphyUsage(failedUsage);
-        showToast(response.status === 429 ? 'Giphy rate limit reached. Try again later.' : 'Failed to fetch GIFs. Try again.', 'error');
+        showToast(response.status === 429 ? 'Giphy rate limit reached. Switched key if possible.' : 'Failed to fetch GIFs. Try again.', 'error');
         if (newOffset === 0) setGifs([]);
         setHasMore(false);
         return;
       }
 
       const json = await response.json();
+      showToast(apiKey !== GIPHY_KEYS[0] ? 'Switched to a fallback Giphy key.' : '', apiKey !== GIPHY_KEYS[0] ? 'info' : 'success');
       const data: Gif[] = json.data || [];
       if (newOffset === 0) setGifs(data);
       else setGifs((prev) => [...prev, ...data]);
       setHasMore(data.length === LIMIT);
       setOffset(newOffset + LIMIT);
-    } catch (error) {
+      } catch (error) {
       const currentUsage = readGiphyUsage();
       const failedUsage = {
         ...currentUsage,
