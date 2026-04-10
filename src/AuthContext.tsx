@@ -31,7 +31,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      // Ignore background token refreshes so tab focus does not remount the app state.
+      if (event === 'TOKEN_REFRESHED') return;
       setSession(session);
       setLoading(false);
     });
