@@ -8,7 +8,7 @@ import { ToolboxPage } from './pages/ToolboxPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { UsersPage } from './pages/UsersPage';
 
-const API_KEY = import.meta.env.VITE_GIPHY_API_KEY as string;
+const API_KEY = (import.meta.env.VITE_GIPHY_API_KEY as string | undefined) ?? 'xi7X7aEg9CRosfoYoIJ1JmztL9J9lNBX';
 const LIMIT = 24;
 const LEGACY_FAVOURITES_KEY = 'gif_studio_favourites';
 const MIGRATION_FLAG_KEY = 'gif_studio_favourites_migrated';
@@ -18,9 +18,6 @@ const DEFAULT_COLLECTION_ID = 'all-favourites';
 const QUEUE_COLLECTION_ID = 'queue';
 const SHARED_COLLECTION_ID = 'shared-reactions';
 
-if (!API_KEY) {
-  throw new Error('Missing VITE_GIPHY_API_KEY environment variable.');
-}
 
 export type Page = 'discover' | 'favourites' | 'toolbox' | 'profile' | 'users';
 type MoodFilter = 'all' | 'savage' | 'wholesome' | 'awkward' | 'excited' | 'chaotic' | 'flirty';
