@@ -450,12 +450,8 @@ async function fetchGifData(endpointFactory: (apiKey: string) => string) {
   for (const apiKey of GIPHY_KEYS) {
     try {
       const response = await fetch(endpointFactory(apiKey));
-      if (response.ok) {
-        return { response, apiKey } as const;
-      }
-      if (response.status !== 429 && response.status !== 403) {
-        return { response, apiKey } as const;
-      }
+      if (response.ok) return { response, apiKey } as const;
+      if (![429, 403, 400, 401].includes(response.status)) return { response, apiKey } as const;
       lastError = new Error(`Giphy responded with ${response.status}`);
     } catch (error) {
       lastError = error;
@@ -533,6 +529,15 @@ export default function App() {
       const { response, apiKey } = await fetchGifData((apiKey) => searchTerm
         ? `https://api.giphy.com/v1/gifs/search?api_key=${apiKey}&q=${encodeURIComponent(searchTerm)}&limit=${LIMIT}&offset=${newOffset}`
         : `https://api.giphy.com/v1/gifs/trending?api_key=${apiKey}&limit=${LIMIT}&offset=${newOffset}`);
+      if (!response.ok) {
+        const failedUsage = { ...readGiphyUsage(), lastStatus: response.status, lastError: `Giphy request failed with status ${response.status}` };
+        writeGiphyUsage(failedUsage);
+        setGiphyUsage(failedUsage);
+        showToast(response.status === 429 ? 'Giphy rate limit reached. Switched key if possible.' : `Failed to fetch GIFs (${response.status}). Try again.`, 'error');
+        if (newOffset === 0) setGifs([]);
+        setHasMore(false);
+        return;
+      }
       const currentUsage = readGiphyUsage();
       const nextUsage: GiphyUsage = {
         hourKey: currentUsage.hourKey,
@@ -543,18 +548,8 @@ export default function App() {
       writeGiphyUsage(nextUsage);
       setGiphyUsage(nextUsage);
 
-      if (!response.ok) {
-        const failedUsage = { ...nextUsage, lastError: `Giphy request failed with status ${response.status}` };
-        writeGiphyUsage(failedUsage);
-        setGiphyUsage(failedUsage);
-        showToast(response.status === 429 ? 'Giphy rate limit reached. Switched key if possible.' : 'Failed to fetch GIFs. Try again.', 'error');
-        if (newOffset === 0) setGifs([]);
-        setHasMore(false);
-        return;
-      }
-
       const json = await response.json();
-      showToast(apiKey !== GIPHY_KEYS[0] ? 'Switched to a fallback Giphy key.' : '', apiKey !== GIPHY_KEYS[0] ? 'info' : 'success');
+      if (apiKey !== GIPHY_KEYS[0]) showToast('Switched to a fallback Giphy key.', 'info');
       const data: Gif[] = json.data || [];
       if (newOffset === 0) setGifs(data);
       else setGifs((prev) => [...prev, ...data]);
