@@ -14,6 +14,7 @@ const LEGACY_FAVOURITES_KEY = 'gif_studio_favourites';
 const MIGRATION_FLAG_KEY = 'gif_studio_favourites_migrated';
 const CACHE_KEY = 'gif_studio_cached_favourites';
 const WORKSPACE_CACHE_KEY = 'gif_studio_workspace_cache';
+const GIPHY_USAGE_KEY = 'gif_studio_giphy_usage';
 const DEFAULT_COLLECTION_ID = 'all-favourites';
 const QUEUE_COLLECTION_ID = 'queue';
 const SHARED_COLLECTION_ID = 'shared-reactions';
@@ -92,6 +93,13 @@ interface Workspace {
   manualImports: Gif[];
 }
 
+interface GiphyUsage {
+  hourKey: string;
+  count: number;
+  lastStatus: number | null;
+  lastError: string;
+}
+
 interface FavouriteRow {
   gif_id: string;
   gif_data: Gif;
@@ -104,8 +112,6 @@ interface ProfileRow {
   landing_page: string | null;
   helper_mode: boolean | null;
   offline_cache: boolean | null;
-  public_profile: boolean | null;
-  public_favourites: boolean | null;
 }
 
 interface CollectionRow {
@@ -403,6 +409,34 @@ function readWorkspaceCache(): Partial<Workspace> | null {
   }
 }
 
+function getCurrentHourKey() {
+  const now = new Date();
+  return `${now.getUTCFullYear()}-${now.getUTCMonth()}-${now.getUTCDate()}-${now.getUTCHours()}`;
+}
+
+function readGiphyUsage(): GiphyUsage {
+  try {
+    const stored = localStorage.getItem(GIPHY_USAGE_KEY);
+    const parsed = stored ? JSON.parse(stored) as Partial<GiphyUsage> : null;
+    const hourKey = getCurrentHourKey();
+    if (!parsed || parsed.hourKey !== hourKey) {
+      return { hourKey, count: 0, lastStatus: null, lastError: '' };
+    }
+    return {
+      hourKey,
+      count: parsed.count ?? 0,
+      lastStatus: parsed.lastStatus ?? null,
+      lastError: parsed.lastError ?? '',
+    };
+  } catch {
+    return { hourKey: getCurrentHourKey(), count: 0, lastStatus: null, lastError: '' };
+  }
+}
+
+function writeGiphyUsage(usage: GiphyUsage) {
+  localStorage.setItem(GIPHY_USAGE_KEY, JSON.stringify(usage));
+}
+
 function getPreferredPage(route: ReturnType<typeof parseHashRoute>, fallbackPage: Page): Page {
   if (route.type === 'page') return route.id;
   return fallbackPage;
@@ -451,6 +485,7 @@ export default function App() {
   const [selectedUserCollections, setSelectedUserCollections] = useState<Collection[]>([]);
   const [selectedUserFavourites, setSelectedUserFavourites] = useState<Gif[]>([]);
   const [selectedUserLoading, setSelectedUserLoading] = useState(false);
+  const [giphyUsage, setGiphyUsage] = useState<GiphyUsage>(readGiphyUsage());
   const inputRef = useRef<HTMLInputElement>(null);
   const syncPanelRef = useRef<HTMLDivElement>(null);
 
@@ -469,13 +504,40 @@ export default function App() {
     const endpoint = searchTerm ? `https://api.giphy.com/v1/gifs/search?api_key=${API_KEY}&q=${encodeURIComponent(searchTerm)}&limit=${LIMIT}&offset=${newOffset}` : `https://api.giphy.com/v1/gifs/trending?api_key=${API_KEY}&limit=${LIMIT}&offset=${newOffset}`;
     try {
       const response = await fetch(endpoint);
+      const currentUsage = readGiphyUsage();
+      const nextUsage: GiphyUsage = {
+        hourKey: currentUsage.hourKey,
+        count: currentUsage.count + 1,
+        lastStatus: response.status,
+        lastError: '',
+      };
+      writeGiphyUsage(nextUsage);
+      setGiphyUsage(nextUsage);
+
+      if (!response.ok) {
+        const failedUsage = { ...nextUsage, lastError: `Giphy request failed with status ${response.status}` };
+        writeGiphyUsage(failedUsage);
+        setGiphyUsage(failedUsage);
+        showToast(response.status === 429 ? 'Giphy rate limit reached. Try again later.' : 'Failed to fetch GIFs. Try again.', 'error');
+        if (newOffset === 0) setGifs([]);
+        setHasMore(false);
+        return;
+      }
+
       const json = await response.json();
       const data: Gif[] = json.data || [];
       if (newOffset === 0) setGifs(data);
       else setGifs((prev) => [...prev, ...data]);
       setHasMore(data.length === LIMIT);
       setOffset(newOffset + LIMIT);
-    } catch {
+    } catch (error) {
+      const currentUsage = readGiphyUsage();
+      const failedUsage = {
+        ...currentUsage,
+        lastError: error instanceof Error ? error.message : 'Unknown Giphy request error',
+      };
+      writeGiphyUsage(failedUsage);
+      setGiphyUsage(failedUsage);
       showToast('Failed to fetch GIFs. Try again.', 'error');
     } finally {
       setLoading(false);
@@ -487,7 +549,7 @@ export default function App() {
     if (!user) return;
     setWorkspaceLoading(true);
     const [profileRes, collectionsRes, itemsRes, metadataRes, historyRes] = await Promise.all([
-      supabase.from('profiles').select('display_name, avatar_url, accent, landing_page, helper_mode, offline_cache, public_profile, public_favourites').eq('user_id', user.id).maybeSingle(),
+      supabase.from('profiles').select('display_name, avatar_url, accent, landing_page, helper_mode, offline_cache').eq('user_id', user.id).maybeSingle(),
       supabase.from('collections').select('id, name, description, color, is_public').eq('user_id', user.id),
       supabase.from('collection_items').select('collection_id, gif_id, position').eq('user_id', user.id).order('position', { ascending: true }),
       supabase.from('gif_metadata').select('gif_id, notes, tags, use_later, imported, custom_source_url, updated_at').eq('user_id', user.id),
@@ -560,8 +622,8 @@ export default function App() {
         landingPage: (profile?.landing_page as Page) ?? cachedWorkspace?.profile?.landingPage ?? defaultWorkspace.profile.landingPage,
         helperMode: profile?.helper_mode ?? cachedWorkspace?.profile?.helperMode ?? defaultWorkspace.profile.helperMode,
         offlineCache: profile?.offline_cache ?? cachedWorkspace?.profile?.offlineCache ?? defaultWorkspace.profile.offlineCache,
-        publicProfile: profile?.public_profile ?? cachedWorkspace?.profile?.publicProfile ?? defaultWorkspace.profile.publicProfile,
-        publicFavourites: profile?.public_favourites ?? cachedWorkspace?.profile?.publicFavourites ?? defaultWorkspace.profile.publicFavourites,
+        publicProfile: cachedWorkspace?.profile?.publicProfile ?? defaultWorkspace.profile.publicProfile,
+        publicFavourites: cachedWorkspace?.profile?.publicFavourites ?? defaultWorkspace.profile.publicFavourites,
       },
       manualImports: (cachedWorkspace?.manualImports as Gif[] | undefined) ?? favourites.filter((gif) => gif.username === 'manual-import'),
     };
@@ -585,8 +647,6 @@ export default function App() {
       landing_page: nextProfile.landingPage,
       helper_mode: nextProfile.helperMode,
       offline_cache: nextProfile.offlineCache,
-      public_profile: nextProfile.publicProfile,
-      public_favourites: nextProfile.publicFavourites,
     }, { onConflict: 'user_id' });
   }, [user]);
 
@@ -663,16 +723,15 @@ export default function App() {
     setUserSearchLoading(true);
     const { data } = await supabase
       .from('profiles')
-      .select('user_id, display_name, avatar_url, accent, public_profile, public_favourites')
-      .eq('public_profile', true)
+      .select('user_id, display_name, avatar_url, accent')
       .or(`display_name.ilike.%${trimmed}%,user_id.ilike.%${trimmed}%`)
       .limit(20);
-    setUserResults(((data ?? []) as Array<{ user_id: string; display_name: string | null; avatar_url: string | null; accent: string | null; public_favourites: boolean | null }>).map((row) => ({
+    setUserResults(((data ?? []) as Array<{ user_id: string; display_name: string | null; avatar_url: string | null; accent: string | null }>).map((row) => ({
       userId: row.user_id,
       displayName: row.display_name ?? 'Creator',
       avatarUrl: normalizeAvatarUrl(row.avatar_url ?? ''),
       accent: row.accent ?? '#a855f7',
-      publicFavourites: row.public_favourites ?? false,
+      publicFavourites: false,
     })));
     setUserSearchLoading(false);
   }, []);
@@ -704,7 +763,7 @@ export default function App() {
 
   const loadPublicUser = useCallback(async (userId: string) => {
     setSelectedUserLoading(true);
-    const { data: profile } = await supabase.from('profiles').select('user_id, display_name, avatar_url, accent, public_profile, public_favourites').eq('user_id', userId).eq('public_profile', true).maybeSingle();
+    const { data: profile } = await supabase.from('profiles').select('user_id, display_name, avatar_url, accent').eq('user_id', userId).maybeSingle();
     if (!profile) {
       setSelectedUserProfile(null);
       setSelectedUserCollections([]);
@@ -717,7 +776,7 @@ export default function App() {
       displayName: profile.display_name ?? 'Creator',
       avatarUrl: normalizeAvatarUrl(profile.avatar_url ?? ''),
       accent: profile.accent ?? '#a855f7',
-      publicFavourites: profile.public_favourites ?? false,
+      publicFavourites: false,
     };
     setSelectedUserProfile(publicProfile);
     const { data: collectionsRows } = await supabase.from('collections').select('id, name, description, color, is_public').eq('user_id', userId).eq('is_public', true);
@@ -730,12 +789,7 @@ export default function App() {
       collectionMap.set(item.collection_id, [...existing, item.gif_id]);
     });
     setSelectedUserCollections(collectionList.map((row) => ({ id: row.id, name: row.name, description: row.description ?? '', color: row.color ?? '#a855f7', isPublic: true, gifIds: collectionMap.get(row.id) ?? [] })));
-    if (publicProfile.publicFavourites) {
-      const { data: favouriteRows } = await supabase.from('favourites').select('gif_id, gif_data').eq('user_id', userId).order('created_at', { ascending: false }).limit(60);
-      setSelectedUserFavourites(((favouriteRows ?? []) as FavouriteRow[]).map((row) => row.gif_data));
-    } else {
-      setSelectedUserFavourites([]);
-    }
+    setSelectedUserFavourites([]);
     setSelectedUserLoading(false);
   }, []);
 
