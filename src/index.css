@@ -11,6 +11,24 @@ body {
   padding: 0;
 }
 
+#root {
+  overflow-x: clip;
+}
+
+@media (max-width: 767px) {
+  .discover-mobile-sticky-controls {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    margin-left: -1rem;
+    margin-right: -1rem;
+    padding: 0 1rem 0.75rem;
+    background: rgba(9, 9, 11, 0.96);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+  }
+}
+
 /* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
