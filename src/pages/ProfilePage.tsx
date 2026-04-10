@@ -13,7 +13,7 @@ export function ProfilePage({ workspace, updateProfileField, user, gifMap, giphy
     <div className="grid xl:grid-cols-[0.9fr_1.1fr] gap-6">
       <SectionCard title="Profile Personalization" subtitle="Profile preferences now persist in Supabase.">
         <div className="space-y-3">
-          <div className="flex items-center gap-4"><div className="avatar-preview">{workspace.profile.avatarUrl ? <img src={workspace.profile.avatarUrl} alt="avatar preview" className="w-full h-full object-cover" /> : <span>{(workspace.profile.displayName || user.email || 'U').slice(0, 2).toUpperCase()}</span>}</div><div className="text-sm text-zinc-400">Use a direct image URL. `ibb.co` links are converted automatically when possible.</div></div>
+          <div className="flex items-center gap-4"><div className="avatar-preview">{workspace.profile.avatarUrl ? <img src={workspace.profile.avatarUrl} alt="avatar preview" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = 'none'; }} /> : <span>{(workspace.profile.displayName || user.email || 'U').slice(0, 2).toUpperCase()}</span>}</div><div className="text-sm text-zinc-400">Use a direct image URL. `ibb.co` links are converted automatically when possible.</div></div>
           <div className="panel-muted">
             <div className="text-sm text-white font-medium">Signed-in account</div>
             <div className="text-xs text-zinc-400 mt-1 break-all">{user.email || 'No email'}</div>
@@ -38,9 +38,9 @@ export function ProfilePage({ workspace, updateProfileField, user, gifMap, giphy
             <div className="text-xs text-zinc-500">This is a local counter, not an official Giphy quota meter. If the last status is `429`, you likely hit a rate limit.</div>
           </div>
         </SectionCard>
-      <SectionCard title="Synced Metadata Review" subtitle="Notes, tags, imports, and queue state persist via Supabase gif metadata.">
+        <SectionCard title="Synced Metadata Review" subtitle="Notes, tags, imports, and queue state persist via Supabase gif metadata.">
         <div className="space-y-3 max-h-[36rem] overflow-auto pr-1">{Object.entries(workspace.gifMeta).map(([gifId, meta]) => <div key={gifId} className="review-row"><div><p className="text-sm font-semibold text-white">{gifMap[gifId]?.title ?? gifId}</p><p className="text-xs text-zinc-500">{meta.imported ? 'Imported' : 'Saved'} · collections: {meta.collectionIds.join(', ') || 'none'}</p></div><div className="flex gap-2 flex-wrap">{meta.tags.map((tag) => <span key={tag} className="chip">#{tag}</span>)}</div></div>)}</div>
-      </SectionCard>
+        </SectionCard>
       </div>
     </div>
   );

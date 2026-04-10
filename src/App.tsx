@@ -513,6 +513,7 @@ export default function App() {
     }
 
     const profile = profileRes.data as ProfileRow | null;
+    const persistedAvatar = normalizeAvatarUrl(profile?.avatar_url ?? cachedWorkspace?.profile?.avatarUrl ?? defaultWorkspace.profile.avatarUrl);
     const collectionsRows = (collectionsRes.data ?? []) as CollectionRow[];
     const itemRows = (itemsRes.data ?? []) as CollectionItemRow[];
     const metadataRows = (metadataRes.data ?? []) as GifMetadataRow[];
@@ -554,7 +555,7 @@ export default function App() {
       history: historyRows.map((row) => ({ gifId: row.gif_id, viewedAt: row.viewed_at })),
       profile: {
         displayName: profile?.display_name ?? cachedWorkspace?.profile?.displayName ?? defaultWorkspace.profile.displayName,
-        avatarUrl: normalizeAvatarUrl(profile?.avatar_url ?? cachedWorkspace?.profile?.avatarUrl ?? defaultWorkspace.profile.avatarUrl),
+        avatarUrl: persistedAvatar,
         accent: profile?.accent ?? cachedWorkspace?.profile?.accent ?? defaultWorkspace.profile.accent,
         landingPage: (profile?.landing_page as Page) ?? cachedWorkspace?.profile?.landingPage ?? defaultWorkspace.profile.landingPage,
         helperMode: profile?.helper_mode ?? cachedWorkspace?.profile?.helperMode ?? defaultWorkspace.profile.helperMode,
@@ -575,18 +576,21 @@ export default function App() {
 
   const saveProfile = useCallback(async (profile: ProfileSettings) => {
     if (!user) return;
+    const existingProfile = workspace.profile;
+    const nextProfile = { ...profile, avatarUrl: profile.avatarUrl.trim() || existingProfile.avatarUrl };
+    setWorkspace((current) => ({ ...current, profile: nextProfile }));
     await supabase.from('profiles').upsert({
       user_id: user.id,
-      display_name: profile.displayName,
-      avatar_url: normalizeAvatarUrl(profile.avatarUrl),
-      accent: profile.accent,
-      landing_page: profile.landingPage,
-      helper_mode: profile.helperMode,
-      offline_cache: profile.offlineCache,
-      public_profile: profile.publicProfile,
-      public_favourites: profile.publicFavourites,
+      display_name: nextProfile.displayName,
+      avatar_url: normalizeAvatarUrl(nextProfile.avatarUrl),
+      accent: nextProfile.accent,
+      landing_page: nextProfile.landingPage,
+      helper_mode: nextProfile.helperMode,
+      offline_cache: nextProfile.offlineCache,
+      public_profile: nextProfile.publicProfile,
+      public_favourites: nextProfile.publicFavourites,
     }, { onConflict: 'user_id' });
-  }, [user]);
+  }, [user, workspace.profile]);
 
   const saveCollection = useCallback(async (collection: Collection) => {
     if (!user || [DEFAULT_COLLECTION_ID, QUEUE_COLLECTION_ID].includes(collection.id)) return;
