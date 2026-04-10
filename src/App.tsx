@@ -8,14 +8,18 @@ import { ToolboxPage } from './pages/ToolboxPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { UsersPage } from './pages/UsersPage';
 
-const GIPHY_KEYS = [
+const GIPHY_KEYS = Array.from(new Set([
+  'D5uXH30M2hOsKzHCmENW3AoLz9GrBCPn',
+  'nbFuL1lVweT1zfmMp7b2jbAnxvdyZVKW',
+  'oVhzTrg0dEpzz0lLIEKnOGmwCIJYr2at',
+  'e6vEl9MuGJ2OR9EwOEYjreZzcij02lHr',
   import.meta.env.VITE_GIPHY_API_KEY_1 as string | undefined,
   import.meta.env.VITE_GIPHY_API_KEY_2 as string | undefined,
   import.meta.env.VITE_GIPHY_API_KEY_3 as string | undefined,
   import.meta.env.VITE_GIPHY_API_KEY_4 as string | undefined,
   import.meta.env.VITE_GIPHY_API_KEY as string | undefined,
   'xi7X7aEg9CRosfoYoIJ1JmztL9J9lNBX',
-].filter((key): key is string => Boolean(key));
+].filter((key): key is string => Boolean(key))));
 const LIMIT = 24;
 const LEGACY_FAVOURITES_KEY = 'gif_studio_favourites';
 const MIGRATION_FLAG_KEY = 'gif_studio_favourites_migrated';
