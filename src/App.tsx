@@ -402,6 +402,11 @@ function readWorkspaceCache(): Partial<Workspace> | null {
   }
 }
 
+function getPreferredPage(route: ReturnType<typeof parseHashRoute>, fallbackPage: Page): Page {
+  if (route.type === 'page') return route.id;
+  return fallbackPage;
+}
+
 export default function App() {
   const { user, loading: authLoading, signOut } = useAuth();
   const [workspace, setWorkspace] = useState<Workspace>(createDefaultWorkspace());
@@ -500,7 +505,7 @@ export default function App() {
         profile: cachedWorkspace.profile ? { ...defaultWorkspace.profile, ...cachedWorkspace.profile } : defaultWorkspace.profile,
         manualImports: (cachedWorkspace.manualImports as Gif[] | undefined) ?? [],
       });
-      setPage((cachedWorkspace.profile?.landingPage as Page | undefined) ?? defaultWorkspace.profile.landingPage);
+      setPage(getPreferredPage(route, (cachedWorkspace.profile?.landingPage as Page | undefined) ?? defaultWorkspace.profile.landingPage));
       setWorkspaceOffline(true);
       setWorkspaceLoading(false);
       return;
@@ -561,11 +566,11 @@ export default function App() {
 
     setWorkspace(nextWorkspace);
     localStorage.setItem(WORKSPACE_CACHE_KEY, JSON.stringify(nextWorkspace));
-    setPage(nextWorkspace.profile.landingPage);
+    setPage(getPreferredPage(route, nextWorkspace.profile.landingPage));
     setWorkspaceOffline(false);
     setLastSyncAt(new Date().toISOString());
     setWorkspaceLoading(false);
-  }, [user, favourites]);
+  }, [user, favourites, route]);
 
   const saveProfile = useCallback(async (profile: ProfileSettings) => {
     if (!user) return;
