@@ -477,7 +477,7 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [favouriteSearch, setFavouriteSearch] = useState('');
   const [filterTag, setFilterTag] = useState('all');
-  const [filterCollectionId, setFilterCollectionId] = useState(DEFAULT_COLLECTION_ID);
+  const [filterCollectionId, setFilterCollectionId] = useState('all');
   const [filterRating, setFilterRating] = useState('all');
   const [filterUsername, setFilterUsername] = useState('all');
   const [moodFilter, setMoodFilter] = useState<MoodFilter>('all');
