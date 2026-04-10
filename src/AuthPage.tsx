@@ -2,6 +2,12 @@ import type { FormEvent } from 'react';
 import { useState } from 'react';
 import { supabase } from './utils/supabase';
 
+const APP_BASE_PATH = import.meta.env.PROD ? '/instagram_gif_favouriter/' : '/';
+
+function getAppRedirectUrl() {
+  return new URL(APP_BASE_PATH, window.location.origin).toString();
+}
+
 function SparkleIcon() {
   return (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
@@ -60,7 +66,7 @@ export default function AuthPage() {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: window.location.origin,
+        redirectTo: getAppRedirectUrl(),
       },
     });
     if (error) {
@@ -77,7 +83,7 @@ export default function AuthPage() {
     if (mode === 'forgot') {
       setLoading(true);
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}?reset=true`,
+        redirectTo: `${getAppRedirectUrl()}?reset=true`,
       });
       setLoading(false);
       if (error) setError(error.message);

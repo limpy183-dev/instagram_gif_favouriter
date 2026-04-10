@@ -10,6 +10,7 @@ const __dirname = path.dirname(__filename);
 
 // https://vite.dev/config/
 export default defineConfig({
+  base: "/instagram_gif_favouriter/",
   plugins: [react(), tailwindcss(), viteSingleFile()],
   resolve: {
     alias: {
