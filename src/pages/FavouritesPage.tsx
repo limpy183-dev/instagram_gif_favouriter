@@ -41,7 +41,7 @@ export function FavouritesPage({ favouriteSearch, setFavouriteSearch, filterColl
         <div className="space-y-4">
           <div className="grid md:grid-cols-2 xl:grid-cols-5 gap-3">
             <input value={favouriteSearch} onChange={(e) => setFavouriteSearch(e.target.value)} placeholder="Search titles, notes, tags..." className="field xl:col-span-2" />
-            <select value={filterCollectionId} onChange={(e) => setFilterCollectionId(e.target.value)} className="field"><option value="all">All favourites</option>{workspace.collections.map((collection) => <option key={collection.id} value={collection.id}>{collection.name}</option>)}</select>
+            <select value={filterCollectionId} onChange={(e) => setFilterCollectionId(e.target.value)} className="field"><option value="all">All favourites</option>{workspace.collections.filter((collection) => collection.id !== 'all-favourites').map((collection) => <option key={collection.id} value={collection.id}>{collection.name}</option>)}</select>
             <select value={filterTag} onChange={(e) => setFilterTag(e.target.value)} className="field"><option value="all">All tags</option>{allTags.map((tag) => <option key={tag} value={tag}>{tag}</option>)}</select>
             <select value={filterRating} onChange={(e) => setFilterRating(e.target.value)} className="field"><option value="all">All ratings</option>{['g', 'pg', 'pg-13', 'r'].map((rating) => <option key={rating} value={rating}>{rating.toUpperCase()}</option>)}</select>
           </div>
