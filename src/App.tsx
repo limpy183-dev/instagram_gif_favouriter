@@ -2,6 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from './AuthContext';
 import AuthPage from './AuthPage';
 import { supabase } from './utils/supabase';
+import { DiscoverPage } from './pages/DiscoverPage';
+import { FavouritesPage } from './pages/FavouritesPage';
+import { ToolboxPage } from './pages/ToolboxPage';
+import { ProfilePage } from './pages/ProfilePage';
+import { UsersPage } from './pages/UsersPage';
 
 const API_KEY = 'xi7X7aEg9CRosfoYoIJ1JmztL9J9lNBX';
 const LIMIT = 24;
@@ -13,17 +18,17 @@ const DEFAULT_COLLECTION_ID = 'all-favourites';
 const QUEUE_COLLECTION_ID = 'queue';
 const SHARED_COLLECTION_ID = 'shared-reactions';
 
-type Page = 'discover' | 'favourites' | 'toolbox' | 'profile';
+export type Page = 'discover' | 'favourites' | 'toolbox' | 'profile' | 'users';
 type MoodFilter = 'all' | 'savage' | 'wholesome' | 'awkward' | 'excited' | 'chaotic' | 'flirty';
 type SyncStatus = 'live' | 'partial' | 'offline';
 
-interface GifImage {
+export interface GifImage {
   url: string;
   width: string;
   height: string;
 }
 
-interface Gif {
+export interface Gif {
   id: string;
   title: string;
   images: {
@@ -43,7 +48,7 @@ interface ToastProps {
   visible: boolean;
 }
 
-interface Collection {
+export interface Collection {
   id: string;
   name: string;
   description: string;
@@ -52,7 +57,7 @@ interface Collection {
   gifIds: string[];
 }
 
-interface GifMeta {
+export interface GifMeta {
   tags: string[];
   notes: string;
   addedAt: string;
@@ -67,13 +72,15 @@ interface HistoryEntry {
   viewedAt: string;
 }
 
-interface ProfileSettings {
+export interface ProfileSettings {
   displayName: string;
   accent: string;
   avatarUrl: string;
   landingPage: Page;
   helperMode: boolean;
   offlineCache: boolean;
+  publicProfile: boolean;
+  publicFavourites: boolean;
 }
 
 interface Workspace {
@@ -96,6 +103,8 @@ interface ProfileRow {
   landing_page: string | null;
   helper_mode: boolean | null;
   offline_cache: boolean | null;
+  public_profile: boolean | null;
+  public_favourites: boolean | null;
 }
 
 interface CollectionRow {
@@ -130,6 +139,14 @@ interface HistoryRow {
 interface GifAssetRow {
   gif_id: string;
   gif_data: Gif;
+}
+
+export interface PublicUserProfile {
+  userId: string;
+  displayName: string;
+  avatarUrl: string;
+  accent: string;
+  publicFavourites: boolean;
 }
 
 const CATEGORIES = [
@@ -179,9 +196,20 @@ function createDefaultWorkspace(): Workspace {
       landingPage: 'discover',
       helperMode: false,
       offlineCache: true,
+      publicProfile: true,
+      publicFavourites: true,
     },
     manualImports: [],
   };
+}
+
+function normalizeAvatarUrl(url: string) {
+  const trimmed = url.trim();
+  if (!trimmed) return '';
+  if (trimmed.includes('i.ibb.co/')) return trimmed;
+  const match = trimmed.match(/^https?:\/\/(?:www\.)?ibb\.co\/([A-Za-z0-9]+)(?:\/.*)?$/i);
+  if (match) return `https://i.ibb.co/${match[1]}/image.png`;
+  return trimmed;
 }
 
 function SearchIcon() {
@@ -220,11 +248,14 @@ function DiscoverIcon() {
 function FavouriteNavIcon() {
   return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" /></svg>;
 }
+function UsersIcon() {
+  return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>;
+}
 function LogoutIcon() {
   return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></svg>;
 }
 
-function Toast({ message, type, visible }: ToastProps) {
+export function Toast({ message, type, visible }: ToastProps) {
   const styles: Record<ToastProps['type'], string> = {
     success: 'bg-emerald-500 shadow-emerald-500/30',
     error: 'bg-red-500 shadow-red-500/30',
@@ -235,11 +266,11 @@ function Toast({ message, type, visible }: ToastProps) {
   return <div className={`fixed bottom-6 right-6 z-[100] flex items-center gap-3 px-5 py-3.5 rounded-2xl text-white text-sm font-medium shadow-2xl ${styles[type]} toast-enter`}>{type === 'success' && <CheckIcon />}{type === 'heart' && <HeartIcon filled />}{message}</div>;
 }
 
-function SkeletonCard({ height }: { height: number }) {
+export function SkeletonCard({ height }: { height: number }) {
   return <div className="masonry-item rounded-2xl overflow-hidden shimmer" style={{ height: `${height}px` }} />;
 }
 
-function SectionCard({ title, subtitle, action, children }: { title: string; subtitle?: string; action?: React.ReactNode; children: React.ReactNode }) {
+export function SectionCard({ title, subtitle, action, children }: { title: string; subtitle?: string; action?: React.ReactNode; children: React.ReactNode }) {
   return (
     <section className="rounded-3xl border border-white/10 bg-zinc-900/80 backdrop-blur-sm p-5 shadow-xl shadow-black/10">
       <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
@@ -254,7 +285,7 @@ function SectionCard({ title, subtitle, action, children }: { title: string; sub
   );
 }
 
-function GifCard({ gif, index, onSelect, isFavourited, onToggleFavourite, notePreview, isQueued, onQueueToggle }: {
+export function GifCard({ gif, index, onSelect, isFavourited, onToggleFavourite, notePreview, isQueued, onQueueToggle }: {
   gif: Gif;
   index: number;
   onSelect: (gif: Gif) => void;
@@ -355,9 +386,8 @@ function ensureSystemCollections(collections: Collection[]): Collection[] {
 
 function parseHashRoute() {
   const hash = window.location.hash.replace(/^#/, '');
-  if (hash.startsWith('/collections/')) {
-    return { type: 'public-collection' as const, id: hash.replace('/collections/', '') };
-  }
+  if (hash.startsWith('/collections/')) return { type: 'public-collection' as const, id: hash.replace('/collections/', '') };
+  if (hash.startsWith('/users/')) return { type: 'public-user' as const, id: hash.replace('/users/', '') };
   return { type: 'app' as const, id: '' };
 }
 
@@ -406,6 +436,13 @@ export default function App() {
   const [publicCollection, setPublicCollection] = useState<Collection | null>(null);
   const [publicCollectionGifs, setPublicCollectionGifs] = useState<Gif[]>([]);
   const [publicCollectionLoading, setPublicCollectionLoading] = useState(false);
+  const [userSearch, setUserSearch] = useState('');
+  const [userSearchLoading, setUserSearchLoading] = useState(false);
+  const [userResults, setUserResults] = useState<PublicUserProfile[]>([]);
+  const [selectedUserProfile, setSelectedUserProfile] = useState<PublicUserProfile | null>(null);
+  const [selectedUserCollections, setSelectedUserCollections] = useState<Collection[]>([]);
+  const [selectedUserFavourites, setSelectedUserFavourites] = useState<Gif[]>([]);
+  const [selectedUserLoading, setSelectedUserLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const syncPanelRef = useRef<HTMLDivElement>(null);
 
@@ -442,7 +479,7 @@ export default function App() {
     if (!user) return;
     setWorkspaceLoading(true);
     const [profileRes, collectionsRes, itemsRes, metadataRes, historyRes] = await Promise.all([
-      supabase.from('profiles').select('display_name, avatar_url, accent, landing_page, helper_mode, offline_cache').eq('user_id', user.id).maybeSingle(),
+      supabase.from('profiles').select('display_name, avatar_url, accent, landing_page, helper_mode, offline_cache, public_profile, public_favourites').eq('user_id', user.id).maybeSingle(),
       supabase.from('collections').select('id, name, description, color, is_public').eq('user_id', user.id),
       supabase.from('collection_items').select('collection_id, gif_id, position').eq('user_id', user.id).order('position', { ascending: true }),
       supabase.from('gif_metadata').select('gif_id, notes, tags, use_later, imported, custom_source_url, updated_at').eq('user_id', user.id),
@@ -488,8 +525,7 @@ export default function App() {
       gifIds: collectionMap.get(row.id) ?? [],
     })));
 
-    const systemCollections = defaultWorkspace.collections.filter((collection) => !syncedCollections.some((existing) => existing.id === collection.id));
-    const mergedCollections = ensureSystemCollections([...syncedCollections, ...systemCollections]);
+    const mergedCollections = ensureSystemCollections([...syncedCollections, ...defaultWorkspace.collections.filter((collection) => !syncedCollections.some((existing) => existing.id === collection.id))]);
 
     const gifMeta: Record<string, GifMeta> = {};
     metadataRows.forEach((row) => {
@@ -510,11 +546,13 @@ export default function App() {
       history: historyRows.map((row) => ({ gifId: row.gif_id, viewedAt: row.viewed_at })),
       profile: {
         displayName: profile?.display_name ?? cachedWorkspace?.profile?.displayName ?? defaultWorkspace.profile.displayName,
-        avatarUrl: profile?.avatar_url ?? cachedWorkspace?.profile?.avatarUrl ?? defaultWorkspace.profile.avatarUrl,
+        avatarUrl: normalizeAvatarUrl(profile?.avatar_url ?? cachedWorkspace?.profile?.avatarUrl ?? defaultWorkspace.profile.avatarUrl),
         accent: profile?.accent ?? cachedWorkspace?.profile?.accent ?? defaultWorkspace.profile.accent,
         landingPage: (profile?.landing_page as Page) ?? cachedWorkspace?.profile?.landingPage ?? defaultWorkspace.profile.landingPage,
         helperMode: profile?.helper_mode ?? cachedWorkspace?.profile?.helperMode ?? defaultWorkspace.profile.helperMode,
         offlineCache: profile?.offline_cache ?? cachedWorkspace?.profile?.offlineCache ?? defaultWorkspace.profile.offlineCache,
+        publicProfile: profile?.public_profile ?? cachedWorkspace?.profile?.publicProfile ?? defaultWorkspace.profile.publicProfile,
+        publicFavourites: profile?.public_favourites ?? cachedWorkspace?.profile?.publicFavourites ?? defaultWorkspace.profile.publicFavourites,
       },
       manualImports: (cachedWorkspace?.manualImports as Gif[] | undefined) ?? favourites.filter((gif) => gif.username === 'manual-import'),
     };
@@ -532,50 +570,31 @@ export default function App() {
     await supabase.from('profiles').upsert({
       user_id: user.id,
       display_name: profile.displayName,
-      avatar_url: profile.avatarUrl,
+      avatar_url: normalizeAvatarUrl(profile.avatarUrl),
       accent: profile.accent,
       landing_page: profile.landingPage,
       helper_mode: profile.helperMode,
       offline_cache: profile.offlineCache,
+      public_profile: profile.publicProfile,
+      public_favourites: profile.publicFavourites,
     }, { onConflict: 'user_id' });
   }, [user]);
 
   const saveCollection = useCallback(async (collection: Collection) => {
     if (!user || [DEFAULT_COLLECTION_ID, QUEUE_COLLECTION_ID].includes(collection.id)) return;
-    await supabase.from('collections').upsert({
-      id: collection.id,
-      user_id: user.id,
-      name: collection.name,
-      description: collection.description,
-      color: collection.color,
-      is_public: collection.isPublic,
-    }, { onConflict: 'id' });
+    await supabase.from('collections').upsert({ id: collection.id, user_id: user.id, name: collection.name, description: collection.description, color: collection.color, is_public: collection.isPublic }, { onConflict: 'id' });
     await supabase.from('collection_items').delete().eq('user_id', user.id).eq('collection_id', collection.id);
-    if (collection.gifIds.length > 0) {
-      await supabase.from('collection_items').insert(collection.gifIds.map((gifId, index) => ({ collection_id: collection.id, user_id: user.id, gif_id: gifId, position: index })));
-    }
+    if (collection.gifIds.length > 0) await supabase.from('collection_items').insert(collection.gifIds.map((gifId, index) => ({ collection_id: collection.id, user_id: user.id, gif_id: gifId, position: index })));
   }, [user]);
 
   const saveGifMeta = useCallback(async (gifId: string, meta: GifMeta) => {
     if (!user) return;
-    await supabase.from('gif_metadata').upsert({
-      user_id: user.id,
-      gif_id: gifId,
-      notes: meta.notes,
-      tags: meta.tags,
-      use_later: meta.useLater,
-      imported: meta.imported,
-      custom_source_url: meta.customSourceUrl ?? null,
-    }, { onConflict: 'user_id,gif_id' });
+    await supabase.from('gif_metadata').upsert({ user_id: user.id, gif_id: gifId, notes: meta.notes, tags: meta.tags, use_later: meta.useLater, imported: meta.imported, custom_source_url: meta.customSourceUrl ?? null }, { onConflict: 'user_id,gif_id' });
   }, [user]);
 
   const saveGifAsset = useCallback(async (gif: Gif) => {
     if (!user) return;
-    await supabase.from('gif_assets').upsert({
-      user_id: user.id,
-      gif_id: gif.id,
-      gif_data: gif,
-    }, { onConflict: 'user_id,gif_id' });
+    await supabase.from('gif_assets').upsert({ user_id: user.id, gif_id: gif.id, gif_data: gif }, { onConflict: 'user_id,gif_id' });
   }, [user]);
 
   const saveHistory = useCallback(async (gifId: string) => {
@@ -625,36 +644,28 @@ export default function App() {
     setMigrationChecked(true);
   }, [user]);
 
-  const syncStatus: SyncStatus = workspaceOffline && favouritesOffline
-    ? 'offline'
-    : workspaceOffline || favouritesOffline
-      ? 'partial'
-      : 'live';
-
-  const migrateLegacyFavourites = useCallback(async () => {
-    if (!user || !migrationChecked || favourites.length > 0) return;
-    if (localStorage.getItem(MIGRATION_FLAG_KEY) === 'true') return;
-    let legacyFavourites: Gif[] = [];
-    try {
-      const stored = localStorage.getItem(LEGACY_FAVOURITES_KEY);
-      legacyFavourites = stored ? JSON.parse(stored) as Gif[] : [];
-    } catch {
-      localStorage.setItem(MIGRATION_FLAG_KEY, 'true');
+  const searchUsers = useCallback(async (query: string) => {
+    const trimmed = query.trim();
+    if (!trimmed) {
+      setUserResults([]);
       return;
     }
-    if (legacyFavourites.length === 0) {
-      localStorage.setItem(MIGRATION_FLAG_KEY, 'true');
-      return;
-    }
-    const { error } = await supabase.from('favourites').upsert(legacyFavourites.map((gif) => ({ user_id: user.id, gif_id: gif.id, gif_data: gif })), { onConflict: 'user_id,gif_id' });
-    if (error) {
-      showToast('Failed to migrate local favourites.', 'error');
-      return;
-    }
-    setFavourites(legacyFavourites);
-    localStorage.setItem(MIGRATION_FLAG_KEY, 'true');
-    showToast(`Migrated ${legacyFavourites.length} local favourites`, 'success');
-  }, [user, migrationChecked, favourites]);
+    setUserSearchLoading(true);
+    const { data } = await supabase
+      .from('profiles')
+      .select('user_id, display_name, avatar_url, accent, public_profile, public_favourites')
+      .eq('public_profile', true)
+      .or(`display_name.ilike.%${trimmed}%,user_id.ilike.%${trimmed}%`)
+      .limit(20);
+    setUserResults(((data ?? []) as Array<{ user_id: string; display_name: string | null; avatar_url: string | null; accent: string | null; public_favourites: boolean | null }>).map((row) => ({
+      userId: row.user_id,
+      displayName: row.display_name ?? 'Creator',
+      avatarUrl: normalizeAvatarUrl(row.avatar_url ?? ''),
+      accent: row.accent ?? '#a855f7',
+      publicFavourites: row.public_favourites ?? false,
+    })));
+    setUserSearchLoading(false);
+  }, []);
 
   const loadPublicCollection = useCallback(async (collectionId: string) => {
     setPublicCollectionLoading(true);
@@ -676,22 +687,50 @@ export default function App() {
     ((assetRows ?? []) as GifAssetRow[]).forEach((row) => {
       if (!favouriteMap.has(row.gif_id)) favouriteMap.set(row.gif_id, row.gif_data);
     });
-    setPublicCollection({
-      id: collectionRow.id,
-      name: collectionRow.name,
-      description: collectionRow.description ?? '',
-      color: collectionRow.color ?? '#a855f7',
-      isPublic: true,
-      gifIds,
-    });
+    setPublicCollection({ id: collectionRow.id, name: collectionRow.name, description: collectionRow.description ?? '', color: collectionRow.color ?? '#a855f7', isPublic: true, gifIds });
     setPublicCollectionGifs(gifIds.map((gifId) => favouriteMap.get(gifId)).filter(Boolean) as Gif[]);
     setPublicCollectionLoading(false);
   }, []);
 
-  useEffect(() => {
-    if (user) {
-      fetchGifs('', '', 0);
+  const loadPublicUser = useCallback(async (userId: string) => {
+    setSelectedUserLoading(true);
+    const { data: profile } = await supabase.from('profiles').select('user_id, display_name, avatar_url, accent, public_profile, public_favourites').eq('user_id', userId).eq('public_profile', true).maybeSingle();
+    if (!profile) {
+      setSelectedUserProfile(null);
+      setSelectedUserCollections([]);
+      setSelectedUserFavourites([]);
+      setSelectedUserLoading(false);
+      return;
     }
+    const publicProfile: PublicUserProfile = {
+      userId: profile.user_id,
+      displayName: profile.display_name ?? 'Creator',
+      avatarUrl: normalizeAvatarUrl(profile.avatar_url ?? ''),
+      accent: profile.accent ?? '#a855f7',
+      publicFavourites: profile.public_favourites ?? false,
+    };
+    setSelectedUserProfile(publicProfile);
+    const { data: collectionsRows } = await supabase.from('collections').select('id, name, description, color, is_public').eq('user_id', userId).eq('is_public', true);
+    const collectionList = (collectionsRows ?? []) as CollectionRow[];
+    const publicIds = collectionList.map((item) => item.id);
+    const { data: itemRows } = publicIds.length > 0 ? await supabase.from('collection_items').select('collection_id, gif_id, position').eq('user_id', userId).in('collection_id', publicIds).order('position', { ascending: true }) : { data: [] };
+    const collectionMap = new Map<string, string[]>();
+    ((itemRows ?? []) as CollectionItemRow[]).forEach((item) => {
+      const existing = collectionMap.get(item.collection_id) ?? [];
+      collectionMap.set(item.collection_id, [...existing, item.gif_id]);
+    });
+    setSelectedUserCollections(collectionList.map((row) => ({ id: row.id, name: row.name, description: row.description ?? '', color: row.color ?? '#a855f7', isPublic: true, gifIds: collectionMap.get(row.id) ?? [] })));
+    if (publicProfile.publicFavourites) {
+      const { data: favouriteRows } = await supabase.from('favourites').select('gif_id, gif_data').eq('user_id', userId).order('created_at', { ascending: false }).limit(60);
+      setSelectedUserFavourites(((favouriteRows ?? []) as FavouriteRow[]).map((row) => row.gif_data));
+    } else {
+      setSelectedUserFavourites([]);
+    }
+    setSelectedUserLoading(false);
+  }, []);
+
+  useEffect(() => {
+    if (user) fetchGifs('', '', 0);
   }, [user, fetchGifs]);
 
   useEffect(() => {
@@ -704,35 +743,68 @@ export default function App() {
   }, [searchQuery, activeCategory, user, fetchGifs]);
 
   useEffect(() => { loadFavourites(); }, [loadFavourites]);
-  useEffect(() => { migrateLegacyFavourites(); }, [migrateLegacyFavourites]);
   useEffect(() => { if (user) loadWorkspace(); }, [user, loadWorkspace]);
+
+  useEffect(() => {
+    if (!user || !migrationChecked || favourites.length > 0) return;
+    if (localStorage.getItem(MIGRATION_FLAG_KEY) === 'true') return;
+    let legacyFavourites: Gif[] = [];
+    try {
+      const stored = localStorage.getItem(LEGACY_FAVOURITES_KEY);
+      legacyFavourites = stored ? JSON.parse(stored) as Gif[] : [];
+    } catch {
+      localStorage.setItem(MIGRATION_FLAG_KEY, 'true');
+      return;
+    }
+    if (legacyFavourites.length === 0) {
+      localStorage.setItem(MIGRATION_FLAG_KEY, 'true');
+      return;
+    }
+    void supabase.from('favourites').upsert(legacyFavourites.map((gif) => ({ user_id: user.id, gif_id: gif.id, gif_data: gif })), { onConflict: 'user_id,gif_id' }).then(({ error }) => {
+      if (error) {
+        showToast('Failed to migrate local favourites.', 'error');
+        return;
+      }
+      setFavourites(legacyFavourites);
+      localStorage.setItem(MIGRATION_FLAG_KEY, 'true');
+      showToast(`Migrated ${legacyFavourites.length} local favourites`, 'success');
+    });
+  }, [user, migrationChecked, favourites]);
+
   useEffect(() => {
     const handleHashChange = () => {
       const nextRoute = parseHashRoute();
-      if (nextRoute.type === 'public-collection') loadPublicCollection(nextRoute.id);
-      else {
-        setPublicCollection(null);
-        setPublicCollectionGifs([]);
+      if (nextRoute.type === 'public-collection') {
+        void loadPublicCollection(nextRoute.id);
+        return;
       }
+      if (nextRoute.type === 'public-user') {
+        void loadPublicUser(nextRoute.id);
+        return;
+      }
+      setPublicCollection(null);
+      setPublicCollectionGifs([]);
+      setSelectedUserProfile(null);
+      setSelectedUserCollections([]);
+      setSelectedUserFavourites([]);
     };
     window.addEventListener('hashchange', handleHashChange);
     handleHashChange();
     return () => window.removeEventListener('hashchange', handleHashChange);
-  }, [loadPublicCollection]);
+  }, [loadPublicCollection, loadPublicUser]);
 
   useEffect(() => {
     const handlePointerDown = (event: MouseEvent) => {
       if (!syncPanelRef.current) return;
-      if (!syncPanelRef.current.contains(event.target as Node)) {
-        setShowSyncDetails(false);
-      }
+      if (!syncPanelRef.current.contains(event.target as Node)) setShowSyncDetails(false);
     };
-
     document.addEventListener('mousedown', handlePointerDown);
     return () => document.removeEventListener('mousedown', handlePointerDown);
   }, []);
 
-  const updateWorkspace = (updater: (current: Workspace) => Workspace) => setWorkspace((current) => updater(current));
+  useEffect(() => {
+    if (workspace.profile.offlineCache) localStorage.setItem(WORKSPACE_CACHE_KEY, JSON.stringify(workspace));
+  }, [workspace]);
 
   const retrySync = async () => {
     if (!user) return;
@@ -744,29 +816,16 @@ export default function App() {
     }
   };
 
-  useEffect(() => {
-    if (workspace.profile.offlineCache) {
-      localStorage.setItem(WORKSPACE_CACHE_KEY, JSON.stringify(workspace));
-    }
-  }, [workspace]);
-
   const ensureMeta = useCallback((gif: Gif) => {
     setWorkspace((current) => {
       if (current.gifMeta[gif.id]) return current;
-      return {
-        ...current,
-        gifMeta: {
-          ...current.gifMeta,
-          [gif.id]: { tags: [], notes: '', addedAt: new Date().toISOString(), useLater: false, imported: gif.username === 'manual-import', customSourceUrl: gif.username === 'manual-import' ? gif.images.original.url : undefined, collectionIds: [DEFAULT_COLLECTION_ID] },
-        },
-      };
+      return { ...current, gifMeta: { ...current.gifMeta, [gif.id]: { tags: [], notes: '', addedAt: new Date().toISOString(), useLater: false, imported: gif.username === 'manual-import', customSourceUrl: gif.username === 'manual-import' ? gif.images.original.url : undefined, collectionIds: [DEFAULT_COLLECTION_ID] } } };
     });
   }, []);
 
   const gifMap = useMemo(() => Object.fromEntries([...favourites, ...workspace.manualImports].map((gif) => [gif.id, gif])), [favourites, workspace.manualImports]);
   const allTags = useMemo(() => Array.from(new Set(Object.values(workspace.gifMeta).flatMap((meta) => meta.tags))).sort(), [workspace.gifMeta]);
   const allUsernames = useMemo(() => Array.from(new Set(favourites.map((gif) => gif.username).filter(Boolean))).sort(), [favourites]);
-
   const filteredFavourites = useMemo(() => {
     const ids = filterCollectionId === 'all' ? null : workspace.collections.find((collection) => collection.id === filterCollectionId)?.gifIds ?? [];
     return favourites.filter((gif) => {
@@ -780,44 +839,36 @@ export default function App() {
       return true;
     });
   }, [favourites, workspace, favouriteSearch, filterTag, filterRating, filterUsername, filterCollectionId]);
-
   const queuedGifs = useMemo(() => favourites.filter((gif) => workspace.gifMeta[gif.id]?.useLater), [favourites, workspace.gifMeta]);
   const recentHistory = useMemo(() => workspace.history.map((entry) => gifMap[entry.gifId]).filter(Boolean).slice(0, 12), [workspace.history, gifMap]);
   const publicCollections = useMemo(() => workspace.collections.filter((collection) => collection.isPublic), [workspace.collections]);
-
-  const analytics = useMemo(() => ({
-    totalSaved: favourites.length,
-    queued: queuedGifs.length,
-    importedCount: Object.values(workspace.gifMeta).filter((meta) => meta.imported).length,
-    topTag: allTags[0] ?? 'none',
-  }), [favourites.length, queuedGifs.length, workspace.gifMeta, allTags]);
+  const analytics = useMemo(() => ({ totalSaved: favourites.length, queued: queuedGifs.length, importedCount: Object.values(workspace.gifMeta).filter((meta) => meta.imported).length, topTag: allTags[0] ?? 'none' }), [favourites.length, queuedGifs.length, workspace.gifMeta, allTags]);
+  const syncStatus: SyncStatus = workspaceOffline && favouritesOffline ? 'offline' : workspaceOffline || favouritesOffline ? 'partial' : 'live';
 
   const updateProfileField = async (nextProfile: ProfileSettings) => {
-    setWorkspace((current) => ({ ...current, profile: nextProfile }));
-    await saveProfile(nextProfile);
+    const normalizedProfile = { ...nextProfile, avatarUrl: normalizeAvatarUrl(nextProfile.avatarUrl) };
+    setWorkspace((current) => ({ ...current, profile: normalizedProfile }));
+    await saveProfile(normalizedProfile);
   };
 
   const updateMeta = async (gif: Gif, updater: (meta: GifMeta) => GifMeta) => {
     ensureMeta(gif);
-    const nextMeta = (() => {
-      const currentMeta = workspace.gifMeta[gif.id] ?? { tags: [], notes: '', addedAt: new Date().toISOString(), useLater: false, imported: false, collectionIds: [DEFAULT_COLLECTION_ID] };
-      return updater(currentMeta);
-    })();
+    const nextMeta = updater(workspace.gifMeta[gif.id] ?? { tags: [], notes: '', addedAt: new Date().toISOString(), useLater: false, imported: false, collectionIds: [DEFAULT_COLLECTION_ID] });
     setWorkspace((current) => ({ ...current, gifMeta: { ...current.gifMeta, [gif.id]: nextMeta } }));
     await saveGifMeta(gif.id, nextMeta);
   };
 
   const addHistory = async (gif: Gif) => {
     ensureMeta(gif);
-    setWorkspace((current) => ({
-      ...current,
-      history: [{ gifId: gif.id, viewedAt: new Date().toISOString() }, ...current.history.filter((item) => item.gifId !== gif.id)].slice(0, 30),
-    }));
+    setWorkspace((current) => ({ ...current, history: [{ gifId: gif.id, viewedAt: new Date().toISOString() }, ...current.history.filter((item) => item.gifId !== gif.id)].slice(0, 30) }));
     setSelectedGif(gif);
     await saveHistory(gif.id);
   };
 
   const handleCopy = (text: string, label = 'Copied') => navigator.clipboard.writeText(text).then(() => showToast(`${label} copied to clipboard!`, 'success')).catch(() => showToast('Failed to copy', 'error'));
+  const isFavourited = (id: string) => favourites.some((gif) => gif.id === id);
+  const isQueued = (id: string) => workspace.gifMeta[id]?.useLater ?? false;
+  const currentLabel = searchQuery ? `Results for "${searchQuery}"` : activeCategory ? CATEGORIES.find((category) => category.value === activeCategory)?.label || 'GIFs' : '🔥 Trending Now';
 
   const syncCollection = async (collectionId: string, gifIds: string[]) => {
     const collection = workspace.collections.find((item) => item.id === collectionId);
@@ -837,10 +888,7 @@ export default function App() {
     if (exists) {
       const previous = favourites;
       setFavourites((current) => current.filter((item) => item.id !== gif.id));
-      setWorkspace((current) => ({
-        ...current,
-        collections: current.collections.map((collection) => collection.id === DEFAULT_COLLECTION_ID ? { ...collection, gifIds: collection.gifIds.filter((id) => id !== gif.id) } : collection),
-      }));
+      setWorkspace((current) => ({ ...current, collections: current.collections.map((collection) => collection.id === DEFAULT_COLLECTION_ID ? { ...collection, gifIds: collection.gifIds.filter((id) => id !== gif.id) } : collection) }));
       const { error } = await supabase.from('favourites').delete().eq('user_id', user.id).eq('gif_id', gif.id);
       if (error) {
         setFavourites(previous);
@@ -853,10 +901,7 @@ export default function App() {
     setFavourites((current) => [gif, ...current]);
     ensureMeta(gif);
     const nextDefaultIds = Array.from(new Set([gif.id, ...(workspace.collections.find((item) => item.id === DEFAULT_COLLECTION_ID)?.gifIds ?? [])]));
-    setWorkspace((current) => ({
-      ...current,
-      collections: current.collections.map((collection) => collection.id === DEFAULT_COLLECTION_ID ? { ...collection, gifIds: nextDefaultIds } : collection),
-    }));
+    setWorkspace((current) => ({ ...current, collections: current.collections.map((collection) => collection.id === DEFAULT_COLLECTION_ID ? { ...collection, gifIds: nextDefaultIds } : collection) }));
     await supabase.from('favourites').upsert({ user_id: user.id, gif_id: gif.id, gif_data: gif }, { onConflict: 'user_id,gif_id' });
     showToast('Added to Favourites ♥', 'heart');
   };
@@ -866,14 +911,7 @@ export default function App() {
     const wasQueued = workspace.gifMeta[gif.id]?.useLater ?? false;
     const queueIds = workspace.collections.find((collection) => collection.id === QUEUE_COLLECTION_ID)?.gifIds ?? [];
     const nextQueueIds = wasQueued ? queueIds.filter((id) => id !== gif.id) : [gif.id, ...queueIds.filter((id) => id !== gif.id)];
-    setWorkspace((current) => ({
-      ...current,
-      collections: current.collections.map((collection) => collection.id === QUEUE_COLLECTION_ID ? { ...collection, gifIds: nextQueueIds } : collection),
-      gifMeta: {
-        ...current.gifMeta,
-        [gif.id]: { ...(current.gifMeta[gif.id] ?? { tags: [], notes: '', addedAt: new Date().toISOString(), useLater: false, imported: false, collectionIds: [] }), useLater: !wasQueued },
-      },
-    }));
+    setWorkspace((current) => ({ ...current, collections: current.collections.map((collection) => collection.id === QUEUE_COLLECTION_ID ? { ...collection, gifIds: nextQueueIds } : collection), gifMeta: { ...current.gifMeta, [gif.id]: { ...(current.gifMeta[gif.id] ?? { tags: [], notes: '', addedAt: new Date().toISOString(), useLater: false, imported: false, collectionIds: [] }), useLater: !wasQueued } } }));
     await syncCollection(QUEUE_COLLECTION_ID, nextQueueIds);
     await saveGifMeta(gif.id, { ...(workspace.gifMeta[gif.id] ?? { tags: [], notes: '', addedAt: new Date().toISOString(), useLater: false, imported: false, collectionIds: [] }), useLater: !wasQueued });
   };
@@ -889,20 +927,19 @@ export default function App() {
     showToast('Collection created', 'success');
   };
 
+  const updateCollectionVisibility = async (collectionId: string, isPublic: boolean) => {
+    setWorkspace((current) => ({ ...current, collections: current.collections.map((collection) => collection.id === collectionId ? { ...collection, isPublic } : collection) }));
+    const collection = workspace.collections.find((item) => item.id === collectionId);
+    if (collection) await saveCollection({ ...collection, isPublic });
+  };
+
   const addGifToCollection = async (gif: Gif, collectionId: string) => {
     ensureMeta(gif);
     const collection = workspace.collections.find((item) => item.id === collectionId);
     if (!collection) return;
     const nextGifIds = Array.from(new Set([gif.id, ...collection.gifIds]));
     const nextCollectionIds = Array.from(new Set([collectionId, ...(workspace.gifMeta[gif.id]?.collectionIds ?? [DEFAULT_COLLECTION_ID])]));
-    setWorkspace((current) => ({
-      ...current,
-      collections: current.collections.map((item) => item.id === collectionId ? { ...item, gifIds: nextGifIds } : item),
-      gifMeta: {
-        ...current.gifMeta,
-        [gif.id]: { ...(current.gifMeta[gif.id] ?? { tags: [], notes: '', addedAt: new Date().toISOString(), useLater: false, imported: false, collectionIds: [] }), collectionIds: nextCollectionIds },
-      },
-    }));
+    setWorkspace((current) => ({ ...current, collections: current.collections.map((item) => item.id === collectionId ? { ...item, gifIds: nextGifIds } : item), gifMeta: { ...current.gifMeta, [gif.id]: { ...(current.gifMeta[gif.id] ?? { tags: [], notes: '', addedAt: new Date().toISOString(), useLater: false, imported: false, collectionIds: [] }), collectionIds: nextCollectionIds } } }));
     await syncCollection(collectionId, nextGifIds);
     await updateCollectionIds(gif.id, nextCollectionIds);
     showToast(`Added to ${collection.name}`, 'success');
@@ -924,26 +961,10 @@ export default function App() {
   const importExternalGif = async () => {
     if (!manualImportUrl.trim()) return;
     const id = `import-${crypto.randomUUID()}`;
-    const gif: Gif = {
-      id,
-      title: manualImportTitle.trim() || 'Imported GIF',
-      username: 'manual-import',
-      rating: 'g',
-      images: {
-        fixed_height: { url: manualImportUrl, width: '320', height: '240' },
-        original: { url: manualImportUrl, width: '320', height: '240' },
-        fixed_width: { url: manualImportUrl, width: '320', height: '240' },
-        downsized: { url: manualImportUrl, width: '320', height: '240' },
-      },
-    };
+    const gif: Gif = { id, title: manualImportTitle.trim() || 'Imported GIF', username: 'manual-import', rating: 'g', images: { fixed_height: { url: manualImportUrl, width: '320', height: '240' }, original: { url: manualImportUrl, width: '320', height: '240' }, fixed_width: { url: manualImportUrl, width: '320', height: '240' }, downsized: { url: manualImportUrl, width: '320', height: '240' } } };
     const meta: GifMeta = { tags: ['imported'], notes: 'Imported from external URL', addedAt: new Date().toISOString(), useLater: false, imported: true, customSourceUrl: manualImportUrl, collectionIds: [SHARED_COLLECTION_ID] };
     const sharedIds = [gif.id, ...(workspace.collections.find((item) => item.id === SHARED_COLLECTION_ID)?.gifIds ?? [])];
-    setWorkspace((current) => ({
-      ...current,
-      manualImports: [gif, ...current.manualImports],
-      gifMeta: { ...current.gifMeta, [gif.id]: meta },
-      collections: current.collections.map((collection) => collection.id === SHARED_COLLECTION_ID ? { ...collection, gifIds: sharedIds } : collection),
-    }));
+    setWorkspace((current) => ({ ...current, manualImports: [gif, ...current.manualImports], gifMeta: { ...current.gifMeta, [gif.id]: meta }, collections: current.collections.map((collection) => collection.id === SHARED_COLLECTION_ID ? { ...collection, gifIds: sharedIds } : collection) }));
     setManualImportUrl('');
     setManualImportTitle('');
     await saveGifAsset(gif);
@@ -972,31 +993,15 @@ export default function App() {
   };
 
   const aiSuggestions = useMemo(() => searchQuery.trim() ? [`${searchQuery.toLowerCase()} reaction gif`, `${searchQuery.toLowerCase()} meme response`, `${searchQuery.toLowerCase()} dramatic reaction`] : [], [searchQuery]);
-  const isFavourited = (id: string) => favourites.some((gif) => gif.id === id);
-  const isQueued = (id: string) => workspace.gifMeta[id]?.useLater ?? false;
-  const currentLabel = searchQuery ? `Results for "${searchQuery}"` : activeCategory ? CATEGORIES.find((category) => category.value === activeCategory)?.label || 'GIFs' : '🔥 Trending Now';
 
-  if (authLoading) {
-    return <div className="min-h-screen bg-zinc-950 flex items-center justify-center"><div className="flex flex-col items-center gap-4 text-zinc-400"><div className="w-10 h-10 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" /><p className="text-sm">Loading your session...</p></div></div>;
-  }
+  if (authLoading) return <div className="min-h-screen bg-zinc-950 flex items-center justify-center"><div className="flex flex-col items-center gap-4 text-zinc-400"><div className="w-10 h-10 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" /><p className="text-sm">Loading your session...</p></div></div>;
 
   if (route.type === 'public-collection') {
-    return (
-      <div className="min-h-screen bg-zinc-950 text-white">
-        <main className="max-w-6xl mx-auto px-4 py-10 space-y-6">
-          <div className="flex items-center justify-between gap-4 flex-wrap">
-            <div>
-              <h1 className="text-3xl font-bold text-white">{publicCollection?.name ?? 'Public Collection'}</h1>
-              <p className="text-zinc-500 text-sm mt-1">{publicCollection?.description ?? 'Shared collection view'}</p>
-            </div>
-            <a href="#/" className="secondary-btn no-underline">Back to app</a>
-          </div>
-          {publicCollectionLoading && <div className="masonry-grid">{Array.from({ length: 8 }).map((_, index) => <SkeletonCard key={index} height={[160, 200, 140, 220, 180][index % 5]} />)}</div>}
-          {!publicCollectionLoading && publicCollection && <div className="masonry-grid">{publicCollectionGifs.map((gif, index) => <GifCard key={gif.id} gif={gif} index={index} onSelect={() => {}} isFavourited={false} onToggleFavourite={() => {}} notePreview="" isQueued={false} onQueueToggle={() => {}} />)}</div>}
-          {!publicCollectionLoading && !publicCollection && <div className="empty-state"><div className="text-6xl mb-4">🔗</div><h3 className="text-xl font-bold text-zinc-300 mb-2">Collection not found</h3><p className="text-zinc-500 text-sm">This public collection does not exist or is no longer shared.</p></div>}
-        </main>
-      </div>
-    );
+    return <div className="min-h-screen bg-zinc-950 text-white"><main className="max-w-6xl mx-auto px-4 py-10 space-y-6"><div className="flex items-center justify-between gap-4 flex-wrap"><div><h1 className="text-3xl font-bold text-white">{publicCollection?.name ?? 'Public Collection'}</h1><p className="text-zinc-500 text-sm mt-1">{publicCollection?.description ?? 'Shared collection view'}</p></div><a href="#/" className="secondary-btn no-underline">Back to app</a></div>{publicCollectionLoading && <div className="masonry-grid">{Array.from({ length: 8 }).map((_, index) => <SkeletonCard key={index} height={[160, 200, 140, 220, 180][index % 5]} />)}</div>}{!publicCollectionLoading && publicCollection && <div className="masonry-grid">{publicCollectionGifs.map((gif, index) => <GifCard key={gif.id} gif={gif} index={index} onSelect={() => {}} isFavourited={false} onToggleFavourite={() => {}} notePreview="" isQueued={false} onQueueToggle={() => {}} />)}</div>}{!publicCollectionLoading && !publicCollection && <div className="empty-state"><div className="text-6xl mb-4">🔗</div><h3 className="text-xl font-bold text-zinc-300 mb-2">Collection not found</h3><p className="text-zinc-500 text-sm">This public collection does not exist or is no longer shared.</p></div>}</main><Toast {...toast} /></div>;
+  }
+
+  if (route.type === 'public-user') {
+    return <div className="min-h-screen bg-zinc-950 text-white"><main className="max-w-6xl mx-auto px-4 py-10 space-y-6"><div className="flex items-center justify-between gap-4 flex-wrap"><div><h1 className="text-3xl font-bold text-white">{selectedUserProfile?.displayName ?? 'Public profile'}</h1><p className="text-zinc-500 text-sm mt-1">Shared favourites and public collections</p></div><a href="#/" className="secondary-btn no-underline">Back to app</a></div><UsersPage selectedUserProfile={selectedUserProfile} selectedUserCollections={selectedUserCollections} selectedUserFavourites={selectedUserFavourites} selectedUserLoading={selectedUserLoading} selectedUserPublicView /></main><Toast {...toast} /></div>;
   }
 
   if (!user) return <AuthPage />;
@@ -1015,187 +1020,35 @@ export default function App() {
             </div>
             <div className="flex items-center gap-3 flex-wrap justify-end">
               <div className="relative" ref={syncPanelRef}>
-                <button
-                  type="button"
-                  onClick={() => setShowSyncDetails((current) => !current)}
-                  className={`flex items-center gap-2 rounded-2xl px-3 py-2 text-xs font-semibold border ${syncStatus === 'live' ? 'border-emerald-400/20 bg-emerald-500/10 text-emerald-200' : syncStatus === 'partial' ? 'border-sky-400/20 bg-sky-500/10 text-sky-200' : 'border-amber-400/20 bg-amber-500/10 text-amber-200'}`}
-                >
-                  <span className={`h-2 w-2 rounded-full ${syncStatus === 'live' ? 'bg-emerald-300' : syncStatus === 'partial' ? 'bg-sky-300' : 'bg-amber-300'}`} />
-                  {syncStatus === 'live' ? 'Live sync active' : syncStatus === 'partial' ? 'Partially synced' : 'Offline cache mode'}
-                </button>
-                {showSyncDetails && (
-                  <div className="absolute right-0 top-full mt-2 w-72 rounded-2xl border border-white/10 bg-zinc-900/95 p-4 text-xs shadow-2xl backdrop-blur-xl z-50">
-                    <p className="text-white font-semibold mb-3">Sync details</p>
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-zinc-400">Favourites</span>
-                        <span className={favouritesOffline ? 'text-amber-300' : 'text-emerald-300'}>{favouritesOffline ? 'Cached' : 'Live'}</span>
-                      </div>
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-zinc-400">Collections</span>
-                        <span className={workspaceOffline ? 'text-amber-300' : 'text-emerald-300'}>{workspaceOffline ? 'Cached' : 'Live'}</span>
-                      </div>
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-zinc-400">Metadata</span>
-                        <span className={workspaceOffline ? 'text-amber-300' : 'text-emerald-300'}>{workspaceOffline ? 'Cached' : 'Live'}</span>
-                      </div>
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-zinc-400">History</span>
-                        <span className={workspaceOffline ? 'text-amber-300' : 'text-emerald-300'}>{workspaceOffline ? 'Cached' : 'Live'}</span>
-                      </div>
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-zinc-400">Profile</span>
-                        <span className={workspaceOffline ? 'text-amber-300' : 'text-emerald-300'}>{workspaceOffline ? 'Cached' : 'Live'}</span>
-                      </div>
-                    </div>
-                    <div className="mt-3 flex items-center justify-between gap-3">
-                      <span className="text-zinc-500">Last sync</span>
-                      <span className="text-zinc-300">{lastSyncAt ? new Date(lastSyncAt).toLocaleTimeString() : 'Not yet'}</span>
-                    </div>
-                    <p className="text-zinc-500 mt-3 leading-relaxed">
-                      Cached data appears when Supabase is unavailable. Live mode means the app is currently reading from Supabase.
-                    </p>
-                    <button type="button" onClick={() => { void retrySync(); }} disabled={retryingSync} className="secondary-btn w-full mt-3 disabled:opacity-60 disabled:cursor-not-allowed">
-                      {retryingSync ? (
-                        <>
-                          <span className="inline-block h-3.5 w-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" />
-                          Retrying...
-                        </>
-                      ) : (
-                        'Retry sync now'
-                      )}
-                    </button>
-                  </div>
-                )}
+                <button type="button" onClick={() => setShowSyncDetails((current) => !current)} className={`flex items-center gap-2 rounded-2xl px-3 py-2 text-xs font-semibold border ${syncStatus === 'live' ? 'border-emerald-400/20 bg-emerald-500/10 text-emerald-200' : syncStatus === 'partial' ? 'border-sky-400/20 bg-sky-500/10 text-sky-200' : 'border-amber-400/20 bg-amber-500/10 text-amber-200'}`}><span className={`h-2 w-2 rounded-full ${syncStatus === 'live' ? 'bg-emerald-300' : syncStatus === 'partial' ? 'bg-sky-300' : 'bg-amber-300'}`} />{syncStatus === 'live' ? 'Live sync active' : syncStatus === 'partial' ? 'Partially synced' : 'Offline cache mode'}</button>
+                {showSyncDetails && <div className="absolute right-0 top-full mt-2 w-72 rounded-2xl border border-white/10 bg-zinc-900/95 p-4 text-xs shadow-2xl backdrop-blur-xl z-50"><p className="text-white font-semibold mb-3">Sync details</p><div className="space-y-2"><div className="flex items-center justify-between gap-3"><span className="text-zinc-400">Favourites</span><span className={favouritesOffline ? 'text-amber-300' : 'text-emerald-300'}>{favouritesOffline ? 'Cached' : 'Live'}</span></div><div className="flex items-center justify-between gap-3"><span className="text-zinc-400">Collections</span><span className={workspaceOffline ? 'text-amber-300' : 'text-emerald-300'}>{workspaceOffline ? 'Cached' : 'Live'}</span></div><div className="flex items-center justify-between gap-3"><span className="text-zinc-400">Metadata</span><span className={workspaceOffline ? 'text-amber-300' : 'text-emerald-300'}>{workspaceOffline ? 'Cached' : 'Live'}</span></div><div className="flex items-center justify-between gap-3"><span className="text-zinc-400">History</span><span className={workspaceOffline ? 'text-amber-300' : 'text-emerald-300'}>{workspaceOffline ? 'Cached' : 'Live'}</span></div><div className="flex items-center justify-between gap-3"><span className="text-zinc-400">Profile</span><span className={workspaceOffline ? 'text-amber-300' : 'text-emerald-300'}>{workspaceOffline ? 'Cached' : 'Live'}</span></div></div><div className="mt-3 flex items-center justify-between gap-3"><span className="text-zinc-500">Last sync</span><span className="text-zinc-300">{lastSyncAt ? new Date(lastSyncAt).toLocaleTimeString() : 'Not yet'}</span></div><p className="text-zinc-500 mt-3 leading-relaxed">Cached data appears when Supabase is unavailable. Live mode means the app is currently reading from Supabase.</p><button type="button" onClick={() => { void retrySync(); }} disabled={retryingSync} className="secondary-btn w-full mt-3 disabled:opacity-60 disabled:cursor-not-allowed">{retryingSync ? <><span className="inline-block h-3.5 w-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" />Retrying...</> : 'Retry sync now'}</button></div>}
               </div>
               <nav className="flex items-center gap-1.5 bg-zinc-900 border border-white/10 rounded-2xl p-1 flex-wrap">
-                {(['discover', 'favourites', 'toolbox', 'profile'] as Page[]).map((item) => <button key={item} onClick={() => setPage(item)} className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all duration-200 ${page === item ? 'bg-gradient-to-r from-violet-600 to-pink-600 text-white shadow-lg shadow-violet-500/20' : 'text-zinc-400 hover:text-white hover:bg-white/5'}`}>{item === 'discover' && <DiscoverIcon />}{item === 'favourites' && <FavouriteNavIcon />}<span className="capitalize">{item}</span></button>)}
+                {(['discover', 'favourites', 'toolbox', 'users', 'profile'] as Page[]).map((item) => <button key={item} onClick={() => setPage(item)} className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all duration-200 ${page === item ? 'bg-gradient-to-r from-violet-600 to-pink-600 text-white shadow-lg shadow-violet-500/20' : 'text-zinc-400 hover:text-white hover:bg-white/5'}`}>{item === 'discover' && <DiscoverIcon />}{item === 'favourites' && <FavouriteNavIcon />}{item === 'users' && <UsersIcon />}<span className="capitalize">{item}</span></button>)}
               </nav>
               <div className="flex items-center gap-3 bg-zinc-900 border border-white/10 rounded-2xl px-3 py-2.5 min-w-[240px] max-w-full">
-                <div className="w-10 h-10 rounded-full bg-white/5 border border-white/10 overflow-hidden flex items-center justify-center text-xs font-bold text-white">{workspace.profile.avatarUrl ? <img src={workspace.profile.avatarUrl} alt="avatar" className="w-full h-full object-cover" /> : (workspace.profile.displayName || user.email || 'U').slice(0, 2).toUpperCase()}</div>
+                <div className="w-10 h-10 rounded-full bg-white/5 border border-white/10 overflow-hidden flex items-center justify-center text-xs font-bold text-white">{workspace.profile.avatarUrl ? <img src={workspace.profile.avatarUrl} alt="avatar" className="w-full h-full object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} /> : (workspace.profile.displayName || user.email || 'U').slice(0, 2).toUpperCase()}</div>
                 <div className="min-w-0"><p className="text-white text-sm font-semibold truncate">{workspace.profile.displayName || user.email || 'Signed in'}</p><p className="text-zinc-500 text-xs truncate">{user.email ?? 'Supabase account'}</p></div>
                 <button onClick={handleLogout} className="ml-auto flex items-center gap-2 text-xs text-zinc-300 hover:text-white bg-white/5 hover:bg-white/10 px-3 py-2 rounded-xl transition-all duration-200"><LogoutIcon /><span className="hidden sm:inline">Logout</span></button>
               </div>
             </div>
           </div>
-
-          {page === 'discover' && (
-            <>
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-                <div className="flex items-center gap-3 bg-zinc-900 border border-white/10 rounded-2xl px-4 py-3 search-glow transition-all duration-300 flex-1">
-                  <span className="text-zinc-400 flex-shrink-0"><SearchIcon /></span>
-                  <input ref={inputRef} type="text" placeholder="Search millions of GIFs or describe a reaction..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="flex-1 bg-transparent text-white placeholder-zinc-500 text-sm font-medium outline-none" />
-                  {searchQuery && <button onClick={() => { setSearchQuery(''); inputRef.current?.focus(); }} className="text-zinc-500 hover:text-white transition-colors flex-shrink-0 hover:bg-white/10 p-1 rounded-full"><XIcon /></button>}
-                  {loading && <div className="w-4 h-4 border-2 border-violet-500 border-t-transparent rounded-full animate-spin flex-shrink-0" />}
-                </div>
-                <select value={moodFilter} onChange={(e) => setMoodFilter(e.target.value as MoodFilter)} className="bg-zinc-900 border border-white/10 rounded-2xl px-4 py-3 text-sm text-white outline-none min-w-48">{MOOD_PRESETS.map((mood) => <option key={mood.value} value={mood.value}>{mood.label}</option>)}</select>
-              </div>
-              {aiSuggestions.length > 0 && <div className="flex gap-2 overflow-x-auto mt-3 pb-1 no-scrollbar">{aiSuggestions.map((suggestion) => <button key={suggestion} onClick={() => setSearchQuery(suggestion)} className="chip hover:bg-violet-500/20">Try: {suggestion}</button>)}</div>}
-              <div className="flex gap-2 overflow-x-auto mt-3 pb-1 no-scrollbar">{CATEGORIES.map((category) => <button key={category.value} onClick={() => { setActiveCategory(category.value); setSearchQuery(''); setOffset(0); }} className={`flex-shrink-0 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all duration-200 hover:scale-105 ${activeCategory === category.value && !searchQuery ? 'pill-active' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white border border-white/5'}`}>{category.label}</button>)}</div>
-            </>
-          )}
+          {page === 'discover' && <div className="flex flex-col gap-3 lg:flex-row lg:items-center"><div className="flex items-center gap-3 bg-zinc-900 border border-white/10 rounded-2xl px-4 py-3 search-glow transition-all duration-300 flex-1"><span className="text-zinc-400 flex-shrink-0"><SearchIcon /></span><input ref={inputRef} type="text" placeholder="Search millions of GIFs or describe a reaction..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="flex-1 bg-transparent text-white placeholder-zinc-500 text-sm font-medium outline-none" />{searchQuery && <button onClick={() => { setSearchQuery(''); inputRef.current?.focus(); }} className="text-zinc-500 hover:text-white transition-colors flex-shrink-0 hover:bg-white/10 p-1 rounded-full"><XIcon /></button>}{loading && <div className="w-4 h-4 border-2 border-violet-500 border-t-transparent rounded-full animate-spin flex-shrink-0" />}</div><select value={moodFilter} onChange={(e) => setMoodFilter(e.target.value as MoodFilter)} className="bg-zinc-900 border border-white/10 rounded-2xl px-4 py-3 text-sm text-white outline-none min-w-48">{MOOD_PRESETS.map((mood) => <option key={mood.value} value={mood.value}>{mood.label}</option>)}</select></div>}
+          {page === 'discover' && aiSuggestions.length > 0 && <div className="flex gap-2 overflow-x-auto mt-3 pb-1 no-scrollbar">{aiSuggestions.map((suggestion) => <button key={suggestion} onClick={() => setSearchQuery(suggestion)} className="chip hover:bg-violet-500/20">Try: {suggestion}</button>)}</div>}
+          {page === 'discover' && <div className="flex gap-2 overflow-x-auto mt-3 pb-1 no-scrollbar">{CATEGORIES.map((category) => <button key={category.value} onClick={() => { setActiveCategory(category.value); setSearchQuery(''); setOffset(0); }} className={`flex-shrink-0 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all duration-200 hover:scale-105 ${activeCategory === category.value && !searchQuery ? 'pill-active' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white border border-white/5'}`}>{category.label}</button>)}</div>}
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto px-4 py-6 space-y-6">
         {(workspaceLoading || favouritesLoading) && <div className="masonry-grid">{Array.from({ length: 8 }).map((_, index) => <SkeletonCard key={index} height={[160, 200, 140, 220, 180][index % 5]} />)}</div>}
-
-        {!workspaceLoading && page === 'discover' && (
-          <div className="grid xl:grid-cols-[1.2fr_0.8fr] gap-6">
-            <SectionCard title={currentLabel} subtitle="Search, trend surf, and save quickly for replies, stories, and reels." action={<span className="text-zinc-500 text-xs">{gifs.length} loaded</span>}>
-              <div className="grid md:grid-cols-3 gap-3 mb-4">
-                <div className="stat-card"><strong>{analytics.totalSaved}</strong><span>Synced favourites</span></div>
-                <div className="stat-card"><strong>{analytics.queued}</strong><span>Use later queue</span></div>
-                <div className="stat-card"><strong>{analytics.importedCount}</strong><span>Manual imports</span></div>
-              </div>
-              {loading && <div className="masonry-grid">{Array.from({ length: 12 }).map((_, index) => <SkeletonCard key={index} height={[160, 200, 140, 220, 180][index % 5]} />)}</div>}
-              {!loading && gifs.length > 0 && <div className="masonry-grid">{gifs.map((gif, index) => <GifCard key={gif.id} gif={gif} index={index} onSelect={addHistory} isFavourited={isFavourited(gif.id)} onToggleFavourite={handleToggleFavourite} notePreview={workspace.gifMeta[gif.id]?.notes} isQueued={isQueued(gif.id)} onQueueToggle={handleQueueToggle} />)}</div>}
-              {!loading && gifs.length === 0 && <div className="empty-state"><div className="text-6xl mb-4">🔍</div><h3 className="text-xl font-bold text-zinc-300 mb-2">No GIFs Found</h3><p className="text-zinc-500 text-sm max-w-xs">Try a different search term or browse trending GIFs.</p></div>}
-              {hasMore && !loading && <div className="flex justify-center mt-8"><button onClick={() => fetchGifs(searchQuery, activeCategory, offset)} disabled={loadingMore} className="primary-btn">{loadingMore ? 'Loading more...' : 'Load more GIFs'}</button></div>}
-            </SectionCard>
-            <div className="space-y-6">
-              <SectionCard title="Creator Toolbox" subtitle="Synced helper settings, public collections, and offline fallback.">
-                <div className="space-y-3 text-sm text-zinc-300">
-                  <div className="panel-muted">Multi-device sync: profile, collections, metadata, and history are stored in Supabase.</div>
-                  <div className="panel-muted">Helper mode: {workspace.profile.helperMode ? 'enabled' : 'disabled'}</div>
-                  <div className="panel-muted">Top tag: {analytics.topTag}</div>
-                </div>
-              </SectionCard>
-              <SectionCard title="Recently Viewed" subtitle="Synced viewing history from Supabase.">
-                <div className="grid grid-cols-2 gap-3">{recentHistory.length === 0 ? <p className="text-zinc-500 text-sm">No recent views yet.</p> : recentHistory.map((gif) => <button key={gif.id} onClick={() => addHistory(gif)} className="recent-card"><img src={gif.images.fixed_height.url} alt={gif.title} className="w-full h-24 object-cover rounded-xl mb-2" /><span className="text-xs text-zinc-300 line-clamp-2">{gif.title}</span></button>)}</div>
-              </SectionCard>
-              <SectionCard title="External Import" subtitle="Imported GIFs are now persisted as metadata and shared collection items.">
-                <div className="space-y-3"><input value={manualImportTitle} onChange={(e) => setManualImportTitle(e.target.value)} placeholder="Optional title" className="field" /><input value={manualImportUrl} onChange={(e) => setManualImportUrl(e.target.value)} placeholder="https://...gif" className="field" /><button onClick={importExternalGif} className="primary-btn w-full">Import external GIF</button></div>
-              </SectionCard>
-            </div>
-          </div>
-        )}
-
-        {!workspaceLoading && page === 'favourites' && (
-          <SectionCard title="Favourite Library" subtitle="Collections, tags, smart filters, and queue all sync through Supabase." action={<button onClick={handleClearAll} className="secondary-btn"><TrashIcon />Clear all</button>}>
-            <div className="grid lg:grid-cols-[1fr_18rem] gap-6">
-              <div className="space-y-4">
-                <div className="grid md:grid-cols-2 xl:grid-cols-5 gap-3">
-                  <input value={favouriteSearch} onChange={(e) => setFavouriteSearch(e.target.value)} placeholder="Search titles, notes, tags..." className="field xl:col-span-2" />
-                  <select value={filterCollectionId} onChange={(e) => setFilterCollectionId(e.target.value)} className="field"><option value="all">All collections</option>{workspace.collections.map((collection) => <option key={collection.id} value={collection.id}>{collection.name}</option>)}</select>
-                  <select value={filterTag} onChange={(e) => setFilterTag(e.target.value)} className="field"><option value="all">All tags</option>{allTags.map((tag) => <option key={tag} value={tag}>{tag}</option>)}</select>
-                  <select value={filterRating} onChange={(e) => setFilterRating(e.target.value)} className="field"><option value="all">All ratings</option>{['g', 'pg', 'pg-13', 'r'].map((rating) => <option key={rating} value={rating}>{rating.toUpperCase()}</option>)}</select>
-                </div>
-                <div className="grid md:grid-cols-2 xl:grid-cols-5 gap-3">
-                  <select value={filterUsername} onChange={(e) => setFilterUsername(e.target.value)} className="field"><option value="all">All creators</option>{allUsernames.map((username) => <option key={username} value={username}>@{username}</option>)}</select>
-                  <div className="panel-muted xl:col-span-4">Public collections are shareable via `#/collections/{'{id}'}` links and load without needing the signed-in workspace.</div>
-                </div>
-                {filteredFavourites.length > 0 ? <div className="masonry-grid">{filteredFavourites.map((gif, index) => <div key={gif.id}><GifCard gif={gif} index={index} onSelect={addHistory} isFavourited={true} onToggleFavourite={handleToggleFavourite} notePreview={workspace.gifMeta[gif.id]?.notes} isQueued={isQueued(gif.id)} onQueueToggle={handleQueueToggle} /><div className="mt-2 flex flex-wrap gap-2">{workspace.collections.filter((collection) => ![DEFAULT_COLLECTION_ID, QUEUE_COLLECTION_ID].includes(collection.id)).map((collection) => <button key={collection.id} onClick={() => addGifToCollection(gif, collection.id)} className="chip">Add to {collection.name}</button>)}</div></div>)}</div> : <div className="empty-state"><div className="text-5xl">💔</div><p className="text-zinc-400 mt-3">No favourites match the current filters.</p></div>}
-              </div>
-              <div className="space-y-4">
-                <SectionCard title="Collections" subtitle="These collections now persist in Supabase.">
-                  <div className="space-y-3"><input value={newCollectionName} onChange={(e) => setNewCollectionName(e.target.value)} placeholder="Collection name" className="field" /><input value={newCollectionDescription} onChange={(e) => setNewCollectionDescription(e.target.value)} placeholder="Description" className="field" /><label className="flex items-center gap-2 text-sm text-zinc-300"><input type="checkbox" checked={newCollectionPublic} onChange={(e) => setNewCollectionPublic(e.target.checked)} /> Make public/shareable</label><button onClick={addCollection} className="primary-btn w-full">Create collection</button><div className="space-y-2 max-h-80 overflow-auto pr-1">{workspace.collections.map((collection) => <div key={collection.id} className="collection-card"><div><p className="text-sm font-semibold text-white">{collection.name}</p><p className="text-xs text-zinc-500">{collection.description || 'No description'} · {collection.gifIds.length} GIFs</p></div><button onClick={() => handleCopy(`${window.location.origin}${window.location.pathname}#/collections/${collection.id}`, 'Collection link')} className="secondary-btn">Copy link</button></div>)}</div></div>
-                </SectionCard>
-                <SectionCard title="Use Later Queue" subtitle="Queue order is also persisted.">
-                  <div className="space-y-2 max-h-72 overflow-auto pr-1">{queuedGifs.length === 0 ? <p className="text-zinc-500 text-sm">Queue is empty.</p> : queuedGifs.map((gif) => <div key={gif.id} className="queue-item"><div className="flex items-center gap-3 min-w-0"><img src={gif.images.fixed_height.url} alt={gif.title} className="w-12 h-12 rounded-xl object-cover" /><div className="min-w-0"><p className="text-sm text-white truncate">{gif.title}</p><p className="text-xs text-zinc-500 truncate">{workspace.gifMeta[gif.id]?.notes || 'No note yet'}</p></div></div><div className="flex gap-2"><button onClick={() => reorderQueue('up', gif.id)} className="mini-action">↑</button><button onClick={() => reorderQueue('down', gif.id)} className="mini-action">↓</button></div></div>)}</div>
-                </SectionCard>
-              </div>
-            </div>
-          </SectionCard>
-        )}
-
-        {!workspaceLoading && page === 'toolbox' && (
-          <div className="grid xl:grid-cols-2 gap-6">
-            <SectionCard title="Synced Creator Toolbox" subtitle="Helper mode, public collections, and persistent analytics signals.">
-              <div className="grid md:grid-cols-2 gap-4"><div className="panel-muted">Public collections: {publicCollections.length}</div><div className="panel-muted">Recent history items: {workspace.history.length}</div><div className="panel-muted">Imported GIFs: {analytics.importedCount}</div><div className="panel-muted">Queue size: {analytics.queued}</div></div>
-              <div className="mt-4 flex items-center gap-3 flex-wrap"><button onClick={() => updateProfileField({ ...workspace.profile, helperMode: !workspace.profile.helperMode })} className="primary-btn">{workspace.profile.helperMode ? 'Disable' : 'Enable'} helper mode</button><button onClick={() => setPage('favourites')} className="secondary-btn">Open library</button></div>
-            </SectionCard>
-            <SectionCard title="Public Collections" subtitle="These can be opened directly from shared hash URLs.">
-              <div className="space-y-3">{publicCollections.map((collection) => <div key={collection.id} className="collection-card"><div><p className="text-sm font-semibold text-white">{collection.name}</p><p className="text-xs text-zinc-500">{window.location.origin}{window.location.pathname}#/collections/{collection.id}</p></div><button onClick={() => handleCopy(`${window.location.origin}${window.location.pathname}#/collections/${collection.id}`, 'Collection link')} className="secondary-btn">Copy link</button></div>)}</div>
-            </SectionCard>
-          </div>
-        )}
-
-        {!workspaceLoading && page === 'profile' && (
-          <div className="grid xl:grid-cols-[0.9fr_1.1fr] gap-6">
-            <SectionCard title="Profile Personalization" subtitle="Profile preferences now persist in Supabase.">
-              <div className="space-y-3">
-                <input value={workspace.profile.displayName} onChange={(e) => updateProfileField({ ...workspace.profile, displayName: e.target.value })} placeholder="Display name" className="field" />
-                <input value={workspace.profile.avatarUrl} onChange={(e) => updateProfileField({ ...workspace.profile, avatarUrl: e.target.value })} placeholder="Avatar image URL" className="field" />
-                <div className="flex items-center gap-3"><input type="color" value={workspace.profile.accent} onChange={(e) => updateProfileField({ ...workspace.profile, accent: e.target.value })} className="h-12 w-16 rounded-xl bg-transparent border border-white/10" /><span className="text-sm text-zinc-400">Accent color</span></div>
-                <select value={workspace.profile.landingPage} onChange={(e) => updateProfileField({ ...workspace.profile, landingPage: e.target.value as Page })} className="field"><option value="discover">Discover</option><option value="favourites">Favourites</option><option value="toolbox">Toolbox</option><option value="profile">Profile</option></select>
-                <label className="flex items-center gap-2 text-sm text-zinc-300"><input type="checkbox" checked={workspace.profile.offlineCache} onChange={(e) => updateProfileField({ ...workspace.profile, offlineCache: e.target.checked })} /> Enable offline cached favourites</label>
-              </div>
-            </SectionCard>
-            <SectionCard title="Synced Metadata Review" subtitle="Notes, tags, imports, and queue state persist via Supabase gif metadata.">
-              <div className="space-y-3 max-h-[36rem] overflow-auto pr-1">{Object.entries(workspace.gifMeta).map(([gifId, meta]) => <div key={gifId} className="review-row"><div><p className="text-sm font-semibold text-white">{gifMap[gifId]?.title ?? gifId}</p><p className="text-xs text-zinc-500">{meta.imported ? 'Imported' : 'Saved'} · collections: {meta.collectionIds.join(', ') || 'none'}</p></div><div className="flex gap-2 flex-wrap">{meta.tags.map((tag) => <span key={tag} className="chip">#{tag}</span>)}</div></div>)}</div>
-            </SectionCard>
-          </div>
-        )}
+        {!workspaceLoading && page === 'discover' && <DiscoverPage currentLabel={currentLabel} analytics={analytics} loading={loading} gifs={gifs} hasMore={hasMore} loadingMore={loadingMore} fetchGifs={fetchGifs} searchQuery={searchQuery} activeCategory={activeCategory} offset={offset} addHistory={addHistory} isFavourited={isFavourited} handleToggleFavourite={handleToggleFavourite} workspace={workspace} isQueued={isQueued} handleQueueToggle={handleQueueToggle} recentHistory={recentHistory} manualImportTitle={manualImportTitle} setManualImportTitle={setManualImportTitle} manualImportUrl={manualImportUrl} setManualImportUrl={setManualImportUrl} importExternalGif={importExternalGif} />}
+        {!workspaceLoading && page === 'favourites' && <FavouritesPage favouriteSearch={favouriteSearch} setFavouriteSearch={setFavouriteSearch} filterCollectionId={filterCollectionId} setFilterCollectionId={setFilterCollectionId} filterTag={filterTag} setFilterTag={setFilterTag} filterRating={filterRating} setFilterRating={setFilterRating} filterUsername={filterUsername} setFilterUsername={setFilterUsername} workspace={workspace} allTags={allTags} allUsernames={allUsernames} filteredFavourites={filteredFavourites} queuedGifs={queuedGifs} handleClearAll={handleClearAll} addHistory={addHistory} handleToggleFavourite={handleToggleFavourite} isQueued={isQueued} handleQueueToggle={handleQueueToggle} addGifToCollection={addGifToCollection} newCollectionName={newCollectionName} setNewCollectionName={setNewCollectionName} newCollectionDescription={newCollectionDescription} setNewCollectionDescription={setNewCollectionDescription} newCollectionPublic={newCollectionPublic} setNewCollectionPublic={setNewCollectionPublic} addCollection={addCollection} updateCollectionVisibility={updateCollectionVisibility} reorderQueue={reorderQueue} handleCopy={handleCopy} />}
+        {!workspaceLoading && page === 'toolbox' && <ToolboxPage publicCollections={publicCollections} workspace={workspace} analytics={analytics} updateProfileField={updateProfileField} setPage={setPage} handleCopy={handleCopy} />}
+        {!workspaceLoading && page === 'users' && <UsersPage userSearch={userSearch} setUserSearch={setUserSearch} userSearchLoading={userSearchLoading} searchUsers={searchUsers} userResults={userResults} selectedUserProfile={selectedUserProfile} selectedUserCollections={selectedUserCollections} selectedUserFavourites={selectedUserFavourites} selectedUserLoading={selectedUserLoading} loadPublicUser={loadPublicUser} />}
+        {!workspaceLoading && page === 'profile' && <ProfilePage workspace={workspace} updateProfileField={updateProfileField} user={user} gifMap={gifMap} />}
       </main>
 
-      <footer className="border-t border-white/5 py-6 mt-10">
-        <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <p className="text-zinc-600 text-xs">GIF data provided by <span className="text-zinc-400 font-semibold">GIPHY</span></p>
-          <p className="text-zinc-700 text-xs">Profiles, collections, metadata, history, public sharing, and queue now persist through Supabase</p>
-        </div>
-      </footer>
-
+      <footer className="border-t border-white/5 py-6 mt-10"><div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2"><p className="text-zinc-600 text-xs">GIF data provided by <span className="text-zinc-400 font-semibold">GIPHY</span></p><p className="text-zinc-700 text-xs">Profiles, collections, metadata, history, public sharing, and queue now persist through Supabase</p></div></footer>
       {selectedGif && <GifModal gif={selectedGif} onClose={() => setSelectedGif(null)} onCopy={handleCopy} isFavourited={isFavourited(selectedGif.id)} onToggleFavourite={handleToggleFavourite} note={workspace.gifMeta[selectedGif.id]?.notes ?? ''} tags={workspace.gifMeta[selectedGif.id]?.tags ?? []} onUpdateNote={(gif, note) => { void updateMeta(gif, (meta) => ({ ...meta, notes: note })); }} onAddTag={(gif, tag) => { void updateMeta(gif, (meta) => ({ ...meta, tags: Array.from(new Set([...meta.tags, tag.trim().toLowerCase()])) })); }} />}
       <Toast {...toast} />
     </div>

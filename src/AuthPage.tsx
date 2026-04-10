@@ -60,6 +60,51 @@ export default function AuthPage() {
 
   const clearMessages = () => { setError(''); setSuccessMsg(''); };
 
+  function getAuthErrorMessage(message: string, currentMode: Mode) {
+    const normalized = message.toLowerCase();
+
+    if (normalized.includes('email not confirmed')) {
+      return 'Your account exists but your email is not confirmed yet. Check your inbox and spam folder for the confirmation email.';
+    }
+
+    if (normalized.includes('invalid login credentials')) {
+      return currentMode === 'login'
+        ? 'Invalid email or password. If you just signed up, confirm your email first before signing in.'
+        : message;
+    }
+
+    if (normalized.includes('user already registered')) {
+      return 'This email is already registered. If you have not confirmed it yet, check your inbox for the confirmation email or use Forgot password.';
+    }
+
+    return message;
+  }
+
+  const resendConfirmationEmail = async () => {
+    if (!email.trim()) {
+      setError('Enter your email first so the confirmation email can be resent.');
+      return;
+    }
+
+    setLoading(true);
+    clearMessages();
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email,
+      options: {
+        emailRedirectTo: getAppRedirectUrl(),
+      },
+    });
+    setLoading(false);
+
+    if (error) {
+      setError(getAuthErrorMessage(error.message, mode));
+      return;
+    }
+
+    setSuccessMsg('Confirmation email resent. Check your inbox and spam folder, then sign in after confirming.');
+  };
+
   const handleGoogleLogin = async () => {
     setGoogleLoading(true);
     clearMessages();
@@ -104,14 +149,24 @@ export default function AuthPage() {
     if (mode === 'login') {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       setLoading(false);
-      if (error) setError(error.message);
+      if (error) setError(getAuthErrorMessage(error.message, mode));
     } else {
-      const { error } = await supabase.auth.signUp({ email, password });
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: getAppRedirectUrl(),
+        },
+      });
       setLoading(false);
       if (error) {
-        setError(error.message);
+        setError(getAuthErrorMessage(error.message, mode));
       } else {
-        setSuccessMsg('Account created! Check your email to confirm, then log in.');
+        if (data.user && !data.session) {
+          setSuccessMsg('Account created. Check your email and confirm your account before signing in.');
+        } else {
+          setSuccessMsg('Account created and signed in.');
+        }
         setMode('login');
       }
     }
@@ -265,12 +320,17 @@ export default function AuthPage() {
           {/* Mode switch */}
           <div className="mt-6 text-center text-sm">
             {mode === 'login' && (
-              <p className="text-zinc-500">
-                Don't have an account?{' '}
-                <button type="button" onClick={() => { setMode('signup'); clearMessages(); }} className="text-violet-400 hover:text-violet-300 font-semibold transition-colors">
-                  Sign up
+              <div className="space-y-2">
+                <p className="text-zinc-500">
+                  Don't have an account?{' '}
+                  <button type="button" onClick={() => { setMode('signup'); clearMessages(); }} className="text-violet-400 hover:text-violet-300 font-semibold transition-colors">
+                    Sign up
+                  </button>
+                </p>
+                <button type="button" onClick={() => { void resendConfirmationEmail(); }} className="text-xs text-zinc-400 hover:text-violet-300 transition-colors">
+                  Resend confirmation email
                 </button>
-              </p>
+              </div>
             )}
             {mode === 'signup' && (
               <p className="text-zinc-500">
