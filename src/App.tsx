@@ -576,9 +576,7 @@ export default function App() {
 
   const saveProfile = useCallback(async (profile: ProfileSettings) => {
     if (!user) return;
-    const existingProfile = workspace.profile;
-    const nextProfile = { ...profile, avatarUrl: profile.avatarUrl.trim() || existingProfile.avatarUrl };
-    setWorkspace((current) => ({ ...current, profile: nextProfile }));
+    const nextProfile = { ...profile, avatarUrl: profile.avatarUrl.trim() };
     await supabase.from('profiles').upsert({
       user_id: user.id,
       display_name: nextProfile.displayName,
@@ -590,7 +588,7 @@ export default function App() {
       public_profile: nextProfile.publicProfile,
       public_favourites: nextProfile.publicFavourites,
     }, { onConflict: 'user_id' });
-  }, [user, workspace.profile]);
+  }, [user]);
 
   const saveCollection = useCallback(async (collection: Collection) => {
     if (!user || [DEFAULT_COLLECTION_ID, QUEUE_COLLECTION_ID].includes(collection.id)) return;
