@@ -894,8 +894,8 @@ export default function App() {
   const allTags = useMemo(() => Array.from(new Set(Object.values(workspace.gifMeta).flatMap((meta) => meta.tags))).sort(), [workspace.gifMeta]);
   const allUsernames = useMemo(() => Array.from(new Set(favourites.map((gif) => gif.username).filter(Boolean))).sort(), [favourites]);
   const filteredFavourites = useMemo(() => {
-    const selectedCollectionId = filterCollectionId === 'all' ? DEFAULT_COLLECTION_ID : filterCollectionId;
-    const ids = workspace.collections.find((collection) => collection.id === selectedCollectionId)?.gifIds ?? [];
+    const selectedCollectionId = filterCollectionId === 'all' ? null : filterCollectionId;
+    const ids = selectedCollectionId ? workspace.collections.find((collection) => collection.id === selectedCollectionId)?.gifIds ?? [] : null;
     return favourites.filter((gif) => {
       const meta = workspace.gifMeta[gif.id];
       const haystack = `${gif.title} ${gif.username} ${meta?.notes ?? ''} ${(meta?.tags ?? []).join(' ')}`.toLowerCase();
@@ -903,7 +903,7 @@ export default function App() {
       if (filterTag !== 'all' && !(meta?.tags ?? []).includes(filterTag)) return false;
       if (filterRating !== 'all' && gif.rating !== filterRating) return false;
       if (filterUsername !== 'all' && gif.username !== filterUsername) return false;
-      if (!ids.includes(gif.id)) return false;
+      if (ids && !ids.includes(gif.id)) return false;
       return true;
     });
   }, [favourites, workspace, favouriteSearch, filterTag, filterRating, filterUsername, filterCollectionId]);
