@@ -894,7 +894,8 @@ export default function App() {
   const allTags = useMemo(() => Array.from(new Set(Object.values(workspace.gifMeta).flatMap((meta) => meta.tags))).sort(), [workspace.gifMeta]);
   const allUsernames = useMemo(() => Array.from(new Set(favourites.map((gif) => gif.username).filter(Boolean))).sort(), [favourites]);
   const filteredFavourites = useMemo(() => {
-    const ids = filterCollectionId === 'all' ? null : workspace.collections.find((collection) => collection.id === filterCollectionId)?.gifIds ?? [];
+    const selectedCollectionId = filterCollectionId === 'all' ? DEFAULT_COLLECTION_ID : filterCollectionId;
+    const ids = workspace.collections.find((collection) => collection.id === selectedCollectionId)?.gifIds ?? [];
     return favourites.filter((gif) => {
       const meta = workspace.gifMeta[gif.id];
       const haystack = `${gif.title} ${gif.username} ${meta?.notes ?? ''} ${(meta?.tags ?? []).join(' ')}`.toLowerCase();
@@ -902,7 +903,7 @@ export default function App() {
       if (filterTag !== 'all' && !(meta?.tags ?? []).includes(filterTag)) return false;
       if (filterRating !== 'all' && gif.rating !== filterRating) return false;
       if (filterUsername !== 'all' && gif.username !== filterUsername) return false;
-      if (ids && !ids.includes(gif.id)) return false;
+      if (!ids.includes(gif.id)) return false;
       return true;
     });
   }, [favourites, workspace, favouriteSearch, filterTag, filterRating, filterUsername, filterCollectionId]);
@@ -955,7 +956,19 @@ export default function App() {
     if (exists) {
       const previous = favourites;
       setFavourites((current) => current.filter((item) => item.id !== gif.id));
-      setWorkspace((current) => ({ ...current, collections: current.collections.map((collection) => collection.id === DEFAULT_COLLECTION_ID ? { ...collection, gifIds: collection.gifIds.filter((id) => id !== gif.id) } : collection) }));
+      setWorkspace((current) => ({
+        ...current,
+        collections: current.collections.map((collection) => collection.id === DEFAULT_COLLECTION_ID ? { ...collection, gifIds: collection.gifIds.filter((id) => id !== gif.id) } : collection),
+        gifMeta: current.gifMeta[gif.id]
+          ? {
+              ...current.gifMeta,
+              [gif.id]: {
+                ...current.gifMeta[gif.id],
+                collectionIds: (current.gifMeta[gif.id]?.collectionIds ?? []).filter((id) => id !== DEFAULT_COLLECTION_ID),
+              },
+            }
+          : current.gifMeta,
+      }));
       const { error } = await supabase.from('favourites').delete().eq('user_id', user.id).eq('gif_id', gif.id);
       if (error) {
         setFavourites(previous);
@@ -967,8 +980,22 @@ export default function App() {
     }
     setFavourites((current) => [gif, ...current]);
     ensureMeta(gif);
-    const nextDefaultIds = Array.from(new Set([gif.id, ...(workspace.collections.find((item) => item.id === DEFAULT_COLLECTION_ID)?.gifIds ?? [])]));
-    setWorkspace((current) => ({ ...current, collections: current.collections.map((collection) => collection.id === DEFAULT_COLLECTION_ID ? { ...collection, gifIds: nextDefaultIds } : collection) }));
+    setWorkspace((current) => {
+      const currentDefaultIds = current.collections.find((item) => item.id === DEFAULT_COLLECTION_ID)?.gifIds ?? [];
+      const nextDefaultIds = Array.from(new Set([gif.id, ...currentDefaultIds]));
+      const currentMeta = current.gifMeta[gif.id] ?? { tags: [], notes: '', addedAt: new Date().toISOString(), useLater: false, imported: false, collectionIds: [] };
+      return {
+        ...current,
+        collections: current.collections.map((collection) => collection.id === DEFAULT_COLLECTION_ID ? { ...collection, gifIds: nextDefaultIds } : collection),
+        gifMeta: {
+          ...current.gifMeta,
+          [gif.id]: {
+            ...currentMeta,
+            collectionIds: Array.from(new Set([DEFAULT_COLLECTION_ID, ...(currentMeta.collectionIds ?? [])])),
+          },
+        },
+      };
+    });
     await supabase.from('favourites').upsert({ user_id: user.id, gif_id: gif.id, gif_data: gif }, { onConflict: 'user_id,gif_id' });
     showToast('Added to Favourites ♥', 'heart');
   };
