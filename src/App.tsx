@@ -312,7 +312,7 @@ export function GifCard({ gif, index, onSelect, isFavourited, onToggleFavourite,
   const [loaded, setLoaded] = useState(false);
   const searchName = gif.title?.replace(/\s+GIF$/, '').trim() || 'Untitled';
   return (
-    <div className="masonry-item gif-card relative rounded-2xl overflow-hidden cursor-pointer group" style={{ animationDelay: `${(index % 12) * 40}ms` }}>
+    <div className="masonry-item gif-card relative rounded-2xl overflow-hidden cursor-pointer group" style={{ animationDelay: `${(Math.floor(index / 2) % 6) * 40}ms` }}>
       {!loaded && <div className="shimmer w-full rounded-2xl" style={{ height: '180px' }} />}
       <img src={gif.images.fixed_height.url} alt={gif.title} className={`w-full rounded-2xl transition-transform duration-300 group-hover:scale-105 block ${loaded ? 'opacity-100' : 'opacity-0 absolute inset-0'}`} onLoad={() => setLoaded(true)} onClick={() => onSelect(gif)} />
       <div className="gif-overlay absolute inset-0 rounded-2xl flex flex-col justify-end pointer-events-none" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.55) 45%, rgba(0,0,0,0) 100%)' }}>
