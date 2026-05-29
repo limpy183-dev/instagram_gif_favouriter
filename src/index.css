@@ -97,6 +97,15 @@ textarea:focus-visible {
 @media (min-width: 1024px) { .masonry-grid { columns: 4; } }
 @media (min-width: 1280px) { .masonry-grid { columns: 5; } }
 
+.masonry-grid-compact {
+  columns: 2;
+  column-gap: 12px;
+}
+@media (min-width: 640px) { .masonry-grid-compact { columns: 2; } }
+@media (min-width: 1024px) { .masonry-grid-compact { columns: 3; } }
+@media (min-width: 1280px) { .masonry-grid-compact { columns: 3; } }
+@media (min-width: 1536px) { .masonry-grid-compact { columns: 4; } }
+
 .masonry-item {
   break-inside: avoid;
   margin-bottom: 12px;

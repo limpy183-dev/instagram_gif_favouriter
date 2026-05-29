@@ -16,6 +16,7 @@ import type {
   ToastProps,
   MoodFilter,
   FavouriteSortOption,
+  GifMeta,
 } from "./types";
 
 import { useGiphy } from "./hooks/useGiphy";
@@ -149,6 +150,7 @@ export default function App() {
   const [selectedUserProfile, setSelectedUserProfile] = useState<PublicUserProfile | null>(null);
   const [selectedUserCollections, setSelectedUserCollections] = useState<Collection[]>([]);
   const [selectedUserFavourites, setSelectedUserFavourites] = useState<Gif[]>([]);
+  const [selectedUserMetadata, setSelectedUserMetadata] = useState<Record<string, GifMeta>>({});
   const [selectedUserLoading, setSelectedUserLoading] = useState(false);
   const [showSyncDetails, setShowSyncDetails] = useState(false);
 
@@ -301,6 +303,7 @@ export default function App() {
         setSelectedUserProfile(null);
         setSelectedUserCollections([]);
         setSelectedUserFavourites([]);
+        setSelectedUserMetadata({});
         setSelectedUserLoading(false);
         return;
       }
@@ -311,6 +314,7 @@ export default function App() {
         setSelectedUserProfile(null);
         setSelectedUserCollections([]);
         setSelectedUserFavourites([]);
+        setSelectedUserMetadata({});
         setSelectedUserLoading(false);
         return;
       }
@@ -363,15 +367,39 @@ export default function App() {
 
     // Bug A Fix: Read and populate selectedUserProfile favourites if allowed
     if (publicFavouritesVal) {
-      const { data: favouritesRes } = await supabase
-        .from("favourites")
-        .select("gif_id, gif_data")
-        .eq("user_id", userId)
-        .order("created_at", { ascending: false });
+      const [{ data: favouritesRes }, { data: metadataRes }] = await Promise.all([
+        supabase
+          .from("favourites")
+          .select("gif_id, gif_data")
+          .eq("user_id", userId)
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("gif_metadata")
+          .select("gif_id, notes, tags, use_later, custom_source_url, search_terms, updated_at")
+          .eq("user_id", userId)
+      ]);
 
       setSelectedUserFavourites((favouritesRes ?? []).map((row) => row.gif_data));
+
+      const metadataMap: Record<string, GifMeta> = {};
+      if (metadataRes) {
+        metadataRes.forEach((row) => {
+          metadataMap[row.gif_id] = {
+            tags: row.tags ?? [],
+            notes: row.notes ?? "",
+            addedAt: row.updated_at,
+            useLater: row.use_later,
+            imported: false,
+            customSourceUrl: row.custom_source_url ?? undefined,
+            collectionIds: [],
+            searchTerms: row.search_terms ?? [],
+          };
+        });
+      }
+      setSelectedUserMetadata(metadataMap);
     } else {
       setSelectedUserFavourites([]);
+      setSelectedUserMetadata({});
     }
 
     setSelectedUserLoading(false);
@@ -419,6 +447,7 @@ export default function App() {
       setSelectedUserProfile(null);
       setSelectedUserCollections([]);
       setSelectedUserFavourites([]);
+      setSelectedUserMetadata({});
     };
     window.addEventListener("hashchange", handleHashChange);
     handleHashChange();
@@ -784,8 +813,14 @@ export default function App() {
             selectedUserProfile={selectedUserProfile}
             selectedUserCollections={selectedUserCollections}
             selectedUserFavourites={selectedUserFavourites}
+            selectedUserMetadata={selectedUserMetadata}
             selectedUserLoading={selectedUserLoading}
             selectedUserPublicView
+            isFavourited={isFavourited}
+            onToggleFavourite={handleToggleFavourite}
+            isQueued={isQueued}
+            onQueueToggle={handleQueueToggle}
+            onSelectGif={setSelectedGif}
           />
         </main>
         <Toast {...toast} />
@@ -1123,8 +1158,14 @@ export default function App() {
             selectedUserProfile={selectedUserProfile}
             selectedUserCollections={selectedUserCollections}
             selectedUserFavourites={selectedUserFavourites}
+            selectedUserMetadata={selectedUserMetadata}
             selectedUserLoading={selectedUserLoading}
             loadPublicUser={loadPublicUser}
+            isFavourited={isFavourited}
+            onToggleFavourite={handleToggleFavourite}
+            isQueued={isQueued}
+            onQueueToggle={handleQueueToggle}
+            onSelectGif={setSelectedGif}
           />
         )}
         {!workspaceLoading && page === "profile" && (

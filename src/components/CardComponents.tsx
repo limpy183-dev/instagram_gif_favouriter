@@ -35,7 +35,7 @@ interface SectionCardProps {
 
 export function SectionCard({ title, subtitle, action, children }: SectionCardProps) {
   return (
-    <section className="rounded-3xl border border-[var(--border)] bg-[var(--bg-elevated)]/70 backdrop-blur-sm p-5 shadow-2xl shadow-black/30 transition-colors duration-300 hover:border-[var(--border-strong)] fade-in-up">
+    <section className="min-w-0 rounded-3xl border border-[var(--border)] bg-[var(--bg-elevated)]/70 backdrop-blur-sm p-5 shadow-2xl shadow-black/30 transition-colors duration-300 hover:border-[var(--border-strong)] fade-in-up">
       <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
         <div>
           <h3 className="text-white font-semibold text-lg tracking-tight text-balance">{title}</h3>
