@@ -422,17 +422,30 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    const isAuthCallback = window.location.hash.includes("access_token=") || 
+                           window.location.hash.includes("error=") ||
+                           window.location.hash.includes("refresh_token=");
+
+    if (isAuthCallback && user) {
+      // Clean up the URL hash after successful login
+      window.location.hash = `#/${workspace.profile.landingPage || "discover"}`;
+      setPage(workspace.profile.landingPage || "discover");
+      initialLandingAppliedRef.current = true;
+      return;
+    }
+
     if (
       workspace.profile.landingPage &&
       !initialLandingAppliedRef.current &&
       route.type !== "public-collection" &&
-      route.type !== "public-user"
+      route.type !== "public-user" &&
+      !isAuthCallback
     ) {
       setPage(workspace.profile.landingPage);
       window.location.hash = `#/${workspace.profile.landingPage}`;
       initialLandingAppliedRef.current = true;
     }
-  }, [workspace.profile.landingPage, route.type]);
+  }, [workspace.profile.landingPage, route.type, user]);
 
   const gifMap = useMemo(
     () =>
