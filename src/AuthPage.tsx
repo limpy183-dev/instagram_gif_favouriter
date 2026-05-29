@@ -1,118 +1,57 @@
-import * as React from 'react';
-import type { FormEvent } from 'react';
-import { useState, useEffect } from 'react';
-import { supabase } from './utils/supabase';
+import * as React from "react";
+import type { FormEvent } from "react";
+import { useState, useEffect } from "react";
+import { supabase } from "./utils/supabase";
+import { SparkleIcon, GoogleIcon, EyeIcon } from "./components/Icons";
+import { getAppRedirectUrl, getAuthErrorMessage } from "./utils/authHelpers";
+import { DeveloperDiagnostics } from "./components/auth/DeveloperDiagnostics";
 
-function getAppRedirectUrl() {
-  const path = window.location.pathname.startsWith('/instagram_gif_favouriter')
-    ? '/instagram_gif_favouriter/'
-    : '/';
-  return new URL(path, window.location.origin).toString();
-}
-
-function SparkleIcon() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M12 1l2.5 7.5H22l-6.5 4.5 2.5 7.5L12 16l-6 4.5 2.5-7.5L3 8.5h7.5z" />
-    </svg>
-  );
-}
-
-function GoogleIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24">
-      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" />
-      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
-    </svg>
-  );
-}
-
-function EyeIcon({ open }: { open: boolean }) {
-  if (open) {
-    return (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-        <circle cx="12" cy="12" r="3" />
-      </svg>
-    );
-  }
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
-      <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
-      <line x1="1" y1="1" x2="23" y2="23" />
-    </svg>
-  );
-}
-
-type Mode = 'login' | 'signup' | 'forgot';
+type Mode = "login" | "signup" | "forgot";
 
 export default function AuthPage() {
-  const [mode, setMode] = useState<Mode>('login');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
+  const [mode, setMode] = useState<Mode>("login");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [successMsg, setSuccessMsg] = useState('');
+  const [error, setError] = useState("");
+  const [successMsg, setSuccessMsg] = useState("");
   const [showResendEmail, setShowResendEmail] = useState(false);
 
   useEffect(() => {
-    const savedError = localStorage.getItem('gif_studio_google_login_error');
+    const savedError = localStorage.getItem("gif_studio_google_login_error");
     if (savedError) {
       setError(savedError);
-      localStorage.removeItem('gif_studio_google_login_error');
+      localStorage.removeItem("gif_studio_google_login_error");
     }
   }, []);
 
   const clearMessages = () => {
-    setError('');
-    setSuccessMsg('');
+    setError("");
+    setSuccessMsg("");
     setShowResendEmail(false);
   };
 
-  function getAuthErrorMessage(message: string, currentMode: Mode) {
-    const normalized = message.toLowerCase();
-
-    if (normalized.includes('email not confirmed')) {
-      return 'Your account exists but your email is not confirmed yet. Check your inbox and spam folder for the confirmation email.';
-    }
-
-    if (normalized.includes('invalid login credentials')) {
-      if (currentMode === 'login') {
-        setShowResendEmail(true);
-        return 'Invalid email or password. If you just signed up, confirm your email first before signing in.';
-      }
-      return message;
-    }
-
-    if (normalized.includes('user already registered')) {
+  const handleErrorMessage = (msg: string, currentMode: Mode) => {
+    const res = getAuthErrorMessage(msg, currentMode);
+    setError(res.message);
+    if (res.showResendEmail) {
       setShowResendEmail(true);
-      return 'This email is already registered. If you have not confirmed it yet, check your inbox for the confirmation email or use Forgot password.';
     }
-
-    if (normalized.includes('email not confirmed')) {
-      setShowResendEmail(true);
-      return 'Your account exists but your email is not confirmed yet. Check your inbox and spam folder for the confirmation email.';
-    }
-
-    return message;
-  }
+  };
 
   const resendConfirmationEmail = async () => {
     if (!email.trim()) {
-      setError('Enter your email first so the confirmation email can be resent.');
+      setError("Enter your email first so the confirmation email can be resent.");
       return;
     }
 
     setLoading(true);
     clearMessages();
     const { error } = await supabase.auth.resend({
-      type: 'signup',
+      type: "signup",
       email,
       options: {
         emailRedirectTo: getAppRedirectUrl(),
@@ -121,11 +60,11 @@ export default function AuthPage() {
     setLoading(false);
 
     if (error) {
-      setError(getAuthErrorMessage(error.message, mode));
+      handleErrorMessage(error.message, mode);
       return;
     }
 
-    setSuccessMsg('Confirmation email resent. Check your inbox and spam folder, then sign in after confirming.');
+    setSuccessMsg("Confirmation email resent. Check your inbox and spam folder, then sign in after confirming.");
   };
 
   const handleGoogleLogin = async (e: React.MouseEvent<HTMLButtonElement>) => {
@@ -134,20 +73,20 @@ export default function AuthPage() {
     clearMessages();
     try {
       const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
+        provider: "google",
         options: {
           redirectTo: getAppRedirectUrl(),
         },
       });
       if (error) {
-        localStorage.setItem('gif_studio_google_login_error', error.message);
+        localStorage.setItem("gif_studio_google_login_error", error.message);
         setError(error.message);
         setGoogleLoading(false);
       }
     } catch (err: any) {
       console.error("Google login redirect failed:", err);
-      const errMsg = err.message || 'An unexpected error occurred during Google sign in.';
-      localStorage.setItem('gif_studio_google_login_error', errMsg);
+      const errMsg = err.message || "An unexpected error occurred during Google sign in.";
+      localStorage.setItem("gif_studio_google_login_error", errMsg);
       setError(errMsg);
       setGoogleLoading(false);
     }
@@ -157,31 +96,31 @@ export default function AuthPage() {
     e.preventDefault();
     clearMessages();
 
-    if (mode === 'forgot') {
+    if (mode === "forgot") {
       setLoading(true);
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: `${getAppRedirectUrl()}?reset=true`,
       });
       setLoading(false);
       if (error) setError(error.message);
-      else setSuccessMsg('Password reset email sent! Check your inbox.');
+      else setSuccessMsg("Password reset email sent! Check your inbox.");
       return;
     }
 
-    if (mode === 'signup' && password !== confirmPassword) {
-      setError('Passwords do not match.');
+    if (mode === "signup" && password !== confirmPassword) {
+      setError("Passwords do not match.");
       return;
     }
     if (password.length < 6) {
-      setError('Password must be at least 6 characters.');
+      setError("Password must be at least 6 characters.");
       return;
     }
 
     setLoading(true);
-    if (mode === 'login') {
+    if (mode === "login") {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       setLoading(false);
-      if (error) setError(getAuthErrorMessage(error.message, mode));
+      if (error) handleErrorMessage(error.message, mode);
     } else {
       const { data, error } = await supabase.auth.signUp({
         email,
@@ -192,14 +131,14 @@ export default function AuthPage() {
       });
       setLoading(false);
       if (error) {
-        setError(getAuthErrorMessage(error.message, mode));
+        handleErrorMessage(error.message, mode);
       } else {
         if (data.user && !data.session) {
-          setSuccessMsg('Account created. Check your email and confirm your account before signing in.');
+          setSuccessMsg("Account created. Check your email and confirm your account before signing in.");
         } else {
-          setSuccessMsg('Account created and signed in.');
+          setSuccessMsg("Account created and signed in.");
         }
-        setMode('login');
+        setMode("login");
       }
     }
   };
@@ -215,7 +154,6 @@ export default function AuthPage() {
       <div className="relative w-full max-w-md">
         {/* Card */}
         <div className="bg-zinc-900 border border-white/10 rounded-3xl p-8 shadow-2xl fade-in-up">
-
           {/* Logo */}
           <div className="flex flex-col items-center mb-8">
             <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-600 to-pink-500 flex items-center justify-center shadow-lg shadow-violet-500/30 mb-4 float-anim">
@@ -223,14 +161,14 @@ export default function AuthPage() {
             </div>
             <h1 className="text-2xl font-extrabold gradient-text tracking-tight">GIF Studio</h1>
             <p className="text-zinc-500 text-sm mt-1">
-              {mode === 'login' && 'Welcome back'}
-              {mode === 'signup' && 'Create your account'}
-              {mode === 'forgot' && 'Reset your password'}
+              {mode === "login" && "Welcome back"}
+              {mode === "signup" && "Create your account"}
+              {mode === "forgot" && "Reset your password"}
             </p>
           </div>
 
           {/* Google OAuth button */}
-          {mode !== 'forgot' && (
+          {mode !== "forgot" && (
             <>
               <button
                 type="button"
@@ -243,7 +181,7 @@ export default function AuthPage() {
                 ) : (
                   <GoogleIcon />
                 )}
-                {googleLoading ? 'Redirecting...' : 'Continue with Google'}
+                {googleLoading ? "Redirecting..." : "Continue with Google"}
               </button>
 
               {/* Divider */}
@@ -260,10 +198,12 @@ export default function AuthPage() {
             <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-sm px-4 py-3 rounded-xl mb-4">
               <div className="space-y-3">
                 <div>{error}</div>
-                {showResendEmail && mode === 'login' && (
+                {showResendEmail && mode === "login" && (
                   <button
                     type="button"
-                    onClick={() => { void resendConfirmationEmail(); }}
+                    onClick={() => {
+                      void resendConfirmationEmail();
+                    }}
                     className="secondary-btn text-xs"
                   >
                     Resend Email
@@ -287,28 +227,28 @@ export default function AuthPage() {
                 type="email"
                 required
                 value={email}
-                onChange={e => setEmail(e.target.value)}
+                onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@example.com"
                 className="w-full bg-zinc-800 border border-white/10 text-white placeholder-zinc-600 rounded-xl px-4 py-3 text-sm outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500/40 transition-all duration-200"
               />
             </div>
 
             {/* Password */}
-            {mode !== 'forgot' && (
+            {mode !== "forgot" && (
               <div>
                 <label className="block text-zinc-400 text-xs font-medium mb-1.5">Password</label>
                 <div className="relative">
                   <input
-                    type={showPassword ? 'text' : 'password'}
+                    type={showPassword ? "text" : "password"}
                     required
                     value={password}
-                    onChange={e => setPassword(e.target.value)}
+                    onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
                     className="w-full bg-zinc-800 border border-white/10 text-white placeholder-zinc-600 rounded-xl px-4 py-3 pr-12 text-sm outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500/40 transition-all duration-200"
                   />
                   <button
                     type="button"
-                    onClick={() => setShowPassword(v => !v)}
+                    onClick={() => setShowPassword((v) => !v)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 transition-colors p-1"
                   >
                     <EyeIcon open={showPassword} />
@@ -318,15 +258,15 @@ export default function AuthPage() {
             )}
 
             {/* Confirm password */}
-            {mode === 'signup' && (
+            {mode === "signup" && (
               <div>
                 <label className="block text-zinc-400 text-xs font-medium mb-1.5">Confirm password</label>
                 <div className="relative">
                   <input
-                    type={showPassword ? 'text' : 'password'}
+                    type={showPassword ? "text" : "password"}
                     required
                     value={confirmPassword}
-                    onChange={e => setConfirmPassword(e.target.value)}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
                     placeholder="••••••••"
                     className="w-full bg-zinc-800 border border-white/10 text-white placeholder-zinc-600 rounded-xl px-4 py-3 pr-12 text-sm outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500/40 transition-all duration-200"
                   />
@@ -335,11 +275,14 @@ export default function AuthPage() {
             )}
 
             {/* Forgot password link */}
-            {mode === 'login' && (
+            {mode === "login" && (
               <div className="flex justify-end">
                 <button
                   type="button"
-                  onClick={() => { setMode('forgot'); clearMessages(); }}
+                  onClick={() => {
+                    setMode("forgot");
+                    clearMessages();
+                  }}
                   className="text-violet-400 hover:text-violet-300 text-xs font-medium transition-colors"
                 >
                   Forgot password?
@@ -354,78 +297,79 @@ export default function AuthPage() {
               className="w-full py-3 rounded-2xl bg-gradient-to-r from-violet-600 to-pink-600 hover:from-violet-500 hover:to-pink-500 text-white font-semibold text-sm transition-all duration-200 hover:scale-[1.02] hover:shadow-lg hover:shadow-violet-500/30 disabled:opacity-60 disabled:scale-100 mt-1 flex items-center justify-center gap-2"
             >
               {loading ? (
-                <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Loading...</>
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />{" "}
+                  Loading...
+                </>
+              ) : mode === "login" ? (
+                "Sign in"
+              ) : mode === "signup" ? (
+                "Create account"
               ) : (
-                mode === 'login' ? 'Sign in' : mode === 'signup' ? 'Create account' : 'Send reset email'
+                "Send reset email"
               )}
             </button>
           </form>
 
           {/* Mode switch */}
           <div className="mt-6 text-center text-sm">
-            {mode === 'login' && (
+            {mode === "login" && (
               <div className="space-y-2">
                 <p className="text-zinc-500">
-                  Don't have an account?{' '}
-                  <button type="button" onClick={() => { setMode('signup'); clearMessages(); }} className="text-violet-400 hover:text-violet-300 font-semibold transition-colors">
+                  Don't have an account?{" "}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMode("signup");
+                      clearMessages();
+                    }}
+                    className="text-violet-400 hover:text-violet-300 font-semibold transition-colors"
+                  >
                     Sign up
                   </button>
                 </p>
-                <button type="button" onClick={() => { void resendConfirmationEmail(); }} className="text-xs text-zinc-400 hover:text-violet-300 transition-colors">
+                <button
+                  type="button"
+                  onClick={() => {
+                    void resendConfirmationEmail();
+                  }}
+                  className="text-xs text-zinc-400 hover:text-violet-300 transition-colors"
+                >
                   Resend confirmation email
                 </button>
               </div>
             )}
-            {mode === 'signup' && (
+            {mode === "signup" && (
               <p className="text-zinc-500">
-                Already have an account?{' '}
-                <button type="button" onClick={() => { setMode('login'); clearMessages(); }} className="text-violet-400 hover:text-violet-300 font-semibold transition-colors">
+                Already have an account?{" "}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode("login");
+                    clearMessages();
+                  }}
+                  className="text-violet-400 hover:text-violet-300 font-semibold transition-colors"
+                >
                   Sign in
                 </button>
               </p>
             )}
-            {mode === 'forgot' && (
-              <button type="button" onClick={() => { setMode('login'); clearMessages(); }} className="text-violet-400 hover:text-violet-300 font-semibold transition-colors">
+            {mode === "forgot" && (
+              <button
+                type="button"
+                onClick={() => {
+                  setMode("login");
+                  clearMessages();
+                }}
+                className="text-violet-400 hover:text-violet-300 font-semibold transition-colors"
+              >
                 Back to sign in
               </button>
             )}
           </div>
 
           {/* Developer Diagnostics Box */}
-          <div className="mt-8 pt-6 border-t border-white/5 text-left">
-            <details className="group cursor-pointer">
-              <summary className="list-none flex items-center justify-between text-zinc-500 hover:text-zinc-300 text-xs font-semibold select-none transition-colors">
-                <span className="flex items-center gap-1.5">
-                  🛠️ Developer Diagnostics
-                </span>
-                <span className="transition-transform duration-200 group-open:rotate-180">
-                  ▼
-                </span>
-              </summary>
-              <div className="mt-4 p-4 rounded-2xl bg-black/40 border border-white/5 space-y-2 text-[11px] text-zinc-400 font-mono leading-relaxed">
-                <div>
-                  <span className="text-zinc-500">Supabase URL:</span>
-                  <span className="text-violet-300 block break-all mt-0.5">
-                    {import.meta.env.VITE_SUPABASE_URL || 'Not Set'}
-                  </span>
-                  {import.meta.env.VITE_SUPABASE_URL?.includes("placeholder") && (
-                    <span className="text-amber-400 block mt-1">
-                      ⚠️ Using placeholders! Google OAuth requires a real Supabase project URL and Client ID.
-                    </span>
-                  )}
-                </div>
-                <div>
-                  <span className="text-zinc-500">OAuth Redirect URL:</span>
-                  <span className="text-pink-300 block break-all mt-0.5">
-                    {getAppRedirectUrl()}
-                  </span>
-                </div>
-                <div className="text-zinc-500 text-[10px] mt-2 font-sans leading-normal">
-                  Make sure <code className="text-zinc-300">{getAppRedirectUrl()}</code> is added under <strong className="text-zinc-300">Redirect URLs</strong> in your Supabase Auth Settings, and your Google Client ID & Secret are configured in the Supabase Dashboard.
-                </div>
-              </div>
-            </details>
-          </div>
+          <DeveloperDiagnostics />
         </div>
       </div>
     </div>

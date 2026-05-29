@@ -20,20 +20,20 @@ import type {
 } from "./types";
 
 import { useGiphy } from "./hooks/useGiphy";
-import { useWorkspace, normalizeAvatarUrl } from "./hooks/useWorkspace";
+import { useWorkspace } from "./hooks/useWorkspace";
+import { normalizeAvatarUrl } from "./utils/workspaceHelpers";
 import { Toast, SkeletonCard } from "./components/CardComponents";
-import { GifCard } from "./components/GifCard";
 import { GifModal } from "./components/GifModal";
 
 import {
   SearchIcon,
   XIcon,
-  SparkleIcon,
-  DiscoverIcon,
-  FavouriteNavIcon,
-  UsersIcon,
-  LogoutIcon,
 } from "./components/Icons";
+import { Header } from "./components/Layout/Header";
+import { Footer } from "./components/Layout/Footer";
+import { PublicCollectionPage } from "./pages/PublicCollectionPage";
+import { PublicUserProfilePage } from "./pages/PublicUserProfilePage";
+import { useHashRoute, parseHashRoute } from "./hooks/useHashRoute";
 
 const CATEGORIES = [
   { label: "🔥 Trending", value: "" },
@@ -57,23 +57,6 @@ const MOOD_PRESETS: Array<{ label: string; value: MoodFilter; keywords: string[]
   { label: "Chaotic", value: "chaotic", keywords: ["wild", "panic", "mess"] },
   { label: "Flirty", value: "flirty", keywords: ["wink", "kiss", "romance"] },
 ];
-
-function parseHashRoute() {
-  const hash = window.location.hash.replace(/^#/, "");
-  if (hash.startsWith("/collections/")) {
-    return { type: "public-collection" as const, id: hash.replace("/collections/", "") };
-  }
-  if (hash.startsWith("/users/")) {
-    return { type: "public-user" as const, id: hash.replace("/users/", "") };
-  }
-  if (hash.startsWith("/page/")) {
-    return { type: "page" as const, id: hash.replace("/page/", "") as Page };
-  }
-  if (["/discover", "/favourites", "/toolbox", "/users", "/profile"].includes(hash)) {
-    return { type: "page" as const, id: hash.replace("/", "") as Page };
-  }
-  return { type: "app" as const, id: "" };
-}
 
 export default function App() {
   const { user, loading: authLoading, signOut } = useAuth();
@@ -135,7 +118,6 @@ export default function App() {
   // Presentational and other local App states
   const [selectedGif, setSelectedGif] = useState<Gif | null>(null);
   const [activeCategory, setActiveCategory] = useState("");
-  const [avatarError, setAvatarError] = useState(false);
   const [newCollectionName, setNewCollectionName] = useState("");
   const [newCollectionDescription, setNewCollectionDescription] = useState("");
   const [newCollectionPublic, setNewCollectionPublic] = useState(false);
@@ -158,7 +140,14 @@ export default function App() {
   const syncPanelRef = useRef<HTMLDivElement>(null);
   const initialLandingAppliedRef = useRef(false);
 
-  const route = useMemo(parseHashRoute, [window.location.hash]);
+  const [hash, setHash] = useState(window.location.hash);
+  useEffect(() => {
+    const onHashChange = () => setHash(window.location.hash);
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
+
+  const route = useHashRoute(hash);
 
   const searchUsers = useCallback(async (query: string = "") => {
     const trimmed = query.trim();
@@ -320,7 +309,12 @@ export default function App() {
       }
       publicFavouritesVal = profile.public_favourites ?? false;
     }
-
+    
+    if (!profile) {
+      setSelectedUserLoading(false);
+      return;
+    }
+ 
     const publicProfile: PublicUserProfile = {
       userId: profile.user_id,
       displayName: profile.display_name ?? "Creator",
@@ -446,10 +440,6 @@ export default function App() {
   }, [searchQuery, activeCategory, user, fetchGifs, setOffset]);
 
   useEffect(() => {
-    setAvatarError(false);
-  }, [workspace.profile.avatarUrl]);
-
-  useEffect(() => {
     const handleHashChange = () => {
       const nextRoute = parseHashRoute();
       if (nextRoute.type === "public-collection") {
@@ -461,7 +451,7 @@ export default function App() {
         return;
       }
       if (nextRoute.type === "page") {
-        setPage(nextRoute.id);
+        setPage(nextRoute.id as Page);
       }
       setPublicCollection(null);
       setPublicCollectionGifs([]);
@@ -485,7 +475,6 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const hash = window.location.hash;
     const isAuthCallback = hash.includes("access_token=") || 
                            hash.includes("error=") ||
                            hash.includes("refresh_token=");
@@ -520,7 +509,7 @@ export default function App() {
       window.location.hash = `#/${workspace.profile.landingPage}`;
       initialLandingAppliedRef.current = true;
     }
-  }, [workspace.profile.landingPage, route.type, user]);
+  }, [workspace.profile.landingPage, route.type, user, hash]);
 
   const gifMap = useMemo(
     () =>
@@ -769,83 +758,30 @@ export default function App() {
 
   if (route.type === "public-collection") {
     return (
-      <div className="min-h-screen bg-zinc-950 text-white">
-        <main className="max-w-6xl mx-auto px-4 py-10 space-y-6">
-          <div className="flex items-center justify-between gap-4 flex-wrap">
-            <div>
-              <h1 className="text-3xl font-bold text-white">{publicCollection?.name ?? "Public Collection"}</h1>
-              <p className="text-zinc-500 text-sm mt-1">{publicCollection?.description ?? "Shared collection view"}</p>
-            </div>
-            <a href="#/" className="secondary-btn no-underline">
-              Back to app
-            </a>
-          </div>
-          {publicCollectionLoading && (
-            <div className="masonry-grid">
-              {Array.from({ length: 8 }).map((_, index) => (
-                <SkeletonCard key={index} height={[160, 200, 140, 220, 180][index % 5]} />
-              ))}
-            </div>
-          )}
-          {!publicCollectionLoading && publicCollection && (
-            <div className="masonry-grid">
-              {publicCollectionGifs.map((gif, index) => (
-                <GifCard
-                  key={gif.id}
-                  gif={gif}
-                  index={index}
-                  onSelect={() => {}}
-                  isFavourited={false}
-                  onToggleFavourite={() => {}}
-                  notePreview=""
-                  isQueued={false}
-                  onQueueToggle={() => {}}
-                />
-              ))}
-            </div>
-          )}
-          {!publicCollectionLoading && !publicCollection && (
-            <div className="empty-state">
-              <div className="text-6xl mb-4">🔗</div>
-              <h3 className="text-xl font-bold text-zinc-300 mb-2">Collection not found</h3>
-              <p className="text-zinc-500 text-sm">This public collection does not exist or is no longer shared.</p>
-            </div>
-          )}
-        </main>
-        <Toast {...toast} />
-      </div>
+      <PublicCollectionPage
+        publicCollection={publicCollection}
+        publicCollectionLoading={publicCollectionLoading}
+        publicCollectionGifs={publicCollectionGifs}
+        toast={toast}
+      />
     );
   }
 
   if (route.type === "public-user") {
     return (
-      <div className="min-h-screen bg-zinc-950 text-white">
-        <main className="max-w-6xl mx-auto px-4 py-10 space-y-6">
-          <div className="flex items-center justify-between gap-4 flex-wrap">
-            <div>
-              <h1 className="text-3xl font-bold text-white">{selectedUserProfile?.displayName ?? "Public profile"}</h1>
-              <p className="text-zinc-500 text-sm mt-1">Shared favourites and public collections</p>
-            </div>
-            <a href="#/" className="secondary-btn no-underline">
-              Back to app
-            </a>
-          </div>
-          <UsersPage
-            selectedUserProfile={selectedUserProfile}
-            selectedUserCollections={selectedUserCollections}
-            selectedUserFavourites={selectedUserFavourites}
-            selectedUserMetadata={selectedUserMetadata}
-            selectedUserLoading={selectedUserLoading}
-            selectedUserPublicView
-            isFavourited={isFavourited}
-            onToggleFavourite={handleToggleFavourite}
-            isQueued={isQueued}
-            onQueueToggle={handleQueueToggle}
-            onSelectGif={setSelectedGif}
-          />
-        </main>
-        <Toast {...toast} />
-      </div>
+      <PublicUserProfilePage
+        selectedUserProfile={selectedUserProfile}
+        selectedUserCollections={selectedUserCollections}
+        selectedUserFavourites={selectedUserFavourites}
+        selectedUserMetadata={selectedUserMetadata}
+        selectedUserLoading={selectedUserLoading}
+        isFavourited={isFavourited}
+        handleToggleFavourite={handleToggleFavourite}
+        isQueued={isQueued}
+        handleQueueToggle={handleQueueToggle}
+        setSelectedGif={setSelectedGif}
+        toast={toast}
+      />
     );
   }
 
@@ -853,242 +789,100 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white" style={{ ["--accent" as string]: workspace.profile.accent }}>
-      <header className="sticky top-0 z-40 bg-[var(--bg)]/80 backdrop-blur-xl border-b border-[var(--border)]">
-        <div className="max-w-7xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between mb-4 gap-4 flex-wrap">
-            <div className="flex items-center gap-3">
-              <div
-                className="w-9 h-9 rounded-xl flex items-center justify-center shadow-lg glow-pulse"
-                style={{ background: "var(--accent)", color: "#fff" }}
-              >
-                <SparkleIcon />
-              </div>
-              <div>
-                <h1 className="text-lg font-extrabold tracking-tight gradient-text leading-none">GIF Studio</h1>
-                <p className="text-[var(--text-faint)] text-xs">Instagram GIF Favouriter for creators</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3 flex-wrap justify-end">
-              <div className="relative" ref={syncPanelRef}>
-                <button
-                  type="button"
-                  onClick={() => setShowSyncDetails((current) => !current)}
-                  className={`flex items-center gap-2 rounded-2xl px-3 py-2 text-xs font-semibold border ${
-                    syncStatus === "live"
-                      ? "border-emerald-400/20 bg-emerald-500/10 text-emerald-200"
-                      : syncStatus === "partial"
-                      ? "border-sky-400/20 bg-sky-500/10 text-sky-200"
-                      : "border-amber-400/20 bg-amber-500/10 text-amber-200"
-                  }`}
-                >
-                  <span
-                    className={`h-2 w-2 rounded-full ${
-                      syncStatus === "live" ? "bg-emerald-300" : syncStatus === "partial" ? "bg-sky-300" : "bg-amber-300"
-                    }`}
-                  />
-                  {syncStatus === "live"
-                    ? "Live sync active"
-                    : syncStatus === "partial"
-                    ? "Partially synced"
-                    : "Offline cache mode"}
-                </button>
-                {showSyncDetails && (
-                  <div className="absolute right-0 top-full mt-2 w-72 rounded-2xl border border-white/10 bg-zinc-900/95 p-4 text-xs shadow-2xl backdrop-blur-xl z-50">
-                    <p className="text-white font-semibold mb-3">Sync details</p>
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-zinc-400">Favourites</span>
-                        <span className={favouritesOffline ? "text-amber-300" : "text-emerald-300"}>
-                          {favouritesOffline ? "Cached" : "Live"}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-zinc-400">Collections</span>
-                        <span className={workspaceOffline ? "text-amber-300" : "text-emerald-300"}>
-                          {workspaceOffline ? "Cached" : "Live"}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-zinc-400">Metadata</span>
-                        <span className={workspaceOffline ? "text-amber-300" : "text-emerald-300"}>
-                          {workspaceOffline ? "Cached" : "Live"}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-zinc-400">History</span>
-                        <span className={workspaceOffline ? "text-amber-300" : "text-emerald-300"}>
-                          {workspaceOffline ? "Cached" : "Live"}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-zinc-400">Profile</span>
-                        <span className={workspaceOffline ? "text-amber-300" : "text-emerald-300"}>
-                          {workspaceOffline ? "Cached" : "Live"}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="mt-3 flex items-center justify-between gap-3">
-                      <span className="text-zinc-500">Last sync</span>
-                      <span className="text-zinc-300">
-                        {lastSyncAt ? new Date(lastSyncAt).toLocaleTimeString() : "Not yet"}
-                      </span>
-                    </div>
-                    <p className="text-zinc-500 mt-3 leading-relaxed">
-                      Cached data appears when Supabase is unavailable. Live mode means the app is currently reading from
-                      Supabase.
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        void retrySync();
-                      }}
-                      disabled={retryingSync}
-                      className="secondary-btn w-full mt-3 disabled:opacity-60 disabled:cursor-not-allowed"
-                    >
-                      {retryingSync ? (
-                        <>
-                          <span className="inline-block h-3.5 w-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" />
-                          Retrying...
-                        </>
-                      ) : (
-                        "Retry sync now"
-                      )}
-                    </button>
-                  </div>
-                )}
-              </div>
-              <nav className="flex items-center gap-1 bg-[var(--bg-elevated)] border border-[var(--border)] rounded-2xl p-1 flex-wrap">
-                {(["discover", "favourites", "toolbox", "users", "profile"] as Page[]).map((item) => (
-                  <button
-                    key={item}
-                    onClick={() => navigateToPage(item)}
-                    className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all duration-300 ${
-                      page === item ? "text-white shadow-lg" : "text-[var(--text-muted)] hover:text-white hover:bg-white/5"
-                    }`}
-                    style={
-                      page === item
-                        ? { background: "var(--accent)", boxShadow: "0 6px 18px -8px var(--accent-glow)" }
-                        : undefined
-                    }
-                  >
-                    {item === "discover" && <DiscoverIcon />}
-                    {item === "favourites" && <FavouriteNavIcon />}
-                    {item === "users" && <UsersIcon />}
-                    <span className="capitalize">{item}</span>
-                  </button>
-                ))}
-              </nav>
-              <div className="flex items-center gap-3 bg-[var(--bg-elevated)] border border-[var(--border)] rounded-2xl px-3 py-2.5 min-w-[240px] max-w-full transition-colors hover:border-[var(--border-strong)]">
-                <div
-                  className="w-10 h-10 rounded-full border border-[var(--border-strong)] overflow-hidden flex items-center justify-center text-xs font-bold text-white"
-                  style={{ background: "var(--accent-soft)" }}
-                >
-                  {workspace.profile.avatarUrl && !avatarError ? (
-                    <img
-                      src={workspace.profile.avatarUrl}
-                      alt="avatar"
-                      className="w-full h-full object-cover"
-                      onError={() => setAvatarError(true)}
-                    />
-                  ) : (
-                    (workspace.profile.displayName || user.email || "U").slice(0, 2).toUpperCase()
-                  )}
-                </div>
-                <div className="min-w-0">
-                  <p className="text-white text-sm font-semibold truncate">
-                    {workspace.profile.displayName || user.email || "Signed in"}
-                  </p>
-                  <p className="text-[var(--text-faint)] text-xs truncate">{user.email ?? "Supabase account"}</p>
-                </div>
-                <button
-                  onClick={handleLogout}
-                  className="ml-auto flex items-center gap-2 text-xs text-[var(--text-muted)] hover:text-white bg-white/5 hover:bg-white/10 px-3 py-2 rounded-xl transition-all duration-200"
-                >
-                  <LogoutIcon />
-                  <span className="hidden sm:inline">Logout</span>
-                </button>
-              </div>
-            </div>
-          </div>
-          {page === "discover" && (
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-              <div className="flex items-center gap-3 bg-[var(--bg-elevated)] border border-[var(--border)] rounded-2xl px-4 py-3 search-glow flex-1">
-                <span className="text-[var(--text-muted)] flex-shrink-0">
-                  <SearchIcon />
-                </span>
-                <input
-                  ref={inputRef}
-                  type="text"
-                  placeholder="Search millions of GIFs or describe a reaction..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="flex-1 bg-transparent text-white placeholder-[var(--text-faint)] text-sm font-medium outline-none"
-                />
-                {searchQuery && (
-                  <button
-                    onClick={() => {
-                      setSearchQuery("");
-                      inputRef.current?.focus();
-                    }}
-                    className="text-[var(--text-muted)] hover:text-white transition-colors flex-shrink-0 hover:bg-white/10 p-1 rounded-full"
-                  >
-                    <XIcon />
-                  </button>
-                )}
-                {loading && (
-                  <div
-                    className="w-4 h-4 border-2 rounded-full animate-spin flex-shrink-0"
-                    style={{ borderColor: "var(--accent)", borderTopColor: "transparent" }}
-                  />
-                )}
-              </div>
-              <select
-                value={moodFilter}
-                onChange={(e) => setMoodFilter(e.target.value as MoodFilter)}
-                className="bg-[var(--bg-elevated)] border border-[var(--border)] rounded-2xl px-4 py-3 text-sm text-white outline-none min-w-48 focus:border-[var(--accent)] transition-colors"
-              >
-                {MOOD_PRESETS.map((mood) => (
-                  <option key={mood.value} value={mood.value}>
-                    {mood.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-          {page === "discover" && aiSuggestions.length > 0 && (
-            <div className="flex gap-2 overflow-x-auto mt-3 pb-1 no-scrollbar">
-              {aiSuggestions.map((suggestion) => (
-                <button key={suggestion} onClick={() => setSearchQuery(suggestion)} className="chip">
-                  Try: {suggestion}
-                </button>
-              ))}
-            </div>
-          )}
-          {page === "discover" && (
-            <div className="flex gap-2 overflow-x-auto mt-3 pb-1 no-scrollbar">
-              {CATEGORIES.map((category) => (
-                <button
-                  key={category.value || "trending"}
-                  onClick={() => {
-                    setActiveCategory(category.value);
-                    setSearchQuery("");
-                    setOffset(0);
-                  }}
-                  className={`flex-shrink-0 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all duration-300 hover:scale-105 ${
-                    activeCategory === category.value && !searchQuery
-                      ? "pill-active"
-                      : "bg-[var(--bg-elevated)] text-[var(--text-muted)] hover:text-white border border-[var(--border)] hover:border-[var(--border-strong)]"
-                  }`}
-                >
-                  {category.label}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      </header>
+      <Header
+        user={user}
+        workspace={workspace}
+        page={page}
+        navigateToPage={navigateToPage}
+        handleLogout={handleLogout}
+        syncStatus={syncStatus}
+        favouritesOffline={favouritesOffline}
+        workspaceOffline={workspaceOffline}
+        lastSyncAt={lastSyncAt}
+        retryingSync={retryingSync}
+        retrySync={retrySync}
+        showSyncDetails={showSyncDetails}
+        setShowSyncDetails={setShowSyncDetails}
+        syncPanelRef={syncPanelRef}
+      />
 
       <main className="max-w-7xl mx-auto px-4 py-6 space-y-6">
+        {page === "discover" && (
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center mb-6">
+            <div className="flex items-center gap-3 bg-[var(--bg-elevated)] border border-[var(--border)] rounded-2xl px-4 py-3 search-glow flex-1">
+              <span className="text-[var(--text-muted)] flex-shrink-0">
+                <SearchIcon />
+              </span>
+              <input
+                ref={inputRef}
+                type="text"
+                placeholder="Search millions of GIFs or describe a reaction..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="flex-1 bg-transparent text-white placeholder-[var(--text-faint)] text-sm font-medium outline-none"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => {
+                    setSearchQuery("");
+                    inputRef.current?.focus();
+                  }}
+                  className="text-[var(--text-muted)] hover:text-white transition-colors flex-shrink-0 hover:bg-white/10 p-1 rounded-full"
+                >
+                  <XIcon />
+                </button>
+              )}
+              {loading && (
+                <div
+                  className="w-4 h-4 border-2 rounded-full animate-spin flex-shrink-0"
+                  style={{ borderColor: "var(--accent)", borderTopColor: "transparent" }}
+                />
+              )}
+            </div>
+            <select
+              value={moodFilter}
+              onChange={(e) => setMoodFilter(e.target.value as MoodFilter)}
+              className="bg-[var(--bg-elevated)] border border-[var(--border)] rounded-2xl px-4 py-3 text-sm text-white outline-none min-w-48 focus:border-[var(--accent)] transition-colors"
+            >
+              {MOOD_PRESETS.map((mood) => (
+                <option key={mood.value} value={mood.value}>
+                  {mood.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+        {page === "discover" && aiSuggestions.length > 0 && (
+          <div className="flex gap-2 overflow-x-auto mb-3 pb-1 no-scrollbar">
+            {aiSuggestions.map((suggestion) => (
+              <button key={suggestion} onClick={() => setSearchQuery(suggestion)} className="chip">
+                Try: {suggestion}
+              </button>
+            ))}
+          </div>
+        )}
+        {page === "discover" && (
+          <div className="flex gap-2 overflow-x-auto mb-6 pb-1 no-scrollbar">
+            {CATEGORIES.map((category) => (
+              <button
+                key={category.value || "trending"}
+                onClick={() => {
+                  setActiveCategory(category.value);
+                  setSearchQuery("");
+                  setOffset(0);
+                }}
+                className={`flex-shrink-0 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all duration-300 hover:scale-105 ${
+                  activeCategory === category.value && !searchQuery
+                    ? "pill-active"
+                    : "bg-[var(--bg-elevated)] text-[var(--text-muted)] hover:text-white border border-[var(--border)] hover:border-[var(--border-strong)]"
+                }`}
+              >
+                {category.label}
+              </button>
+            ))}
+          </div>
+        )}
+
         {(workspaceLoading || favouritesLoading) && (
           <div className="masonry-grid">
             {Array.from({ length: 8 }).map((_, index) => (
@@ -1200,16 +994,8 @@ export default function App() {
         )}
       </main>
 
-      <footer className="border-t border-[var(--border)] py-6 mt-10">
-        <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <p className="text-[var(--text-faint)] text-xs">
-            GIF data provided by <span className="text-[var(--text-muted)] font-semibold">GIPHY</span>
-          </p>
-          <p className="text-[var(--text-faint)] text-xs">
-            Profiles, collections, metadata, history, public sharing, and queue persist through Supabase
-          </p>
-        </div>
-      </footer>
+      <Footer />
+
       {selectedGif && (
         <GifModal
           gif={selectedGif}
