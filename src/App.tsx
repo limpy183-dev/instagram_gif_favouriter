@@ -720,6 +720,14 @@ export default function App() {
     void handleToggleFavourite(gif, currentSearchTerm);
   };
 
+  const handleSelectGif = useCallback(
+    (gif: Gif) => {
+      setSelectedGif(gif);
+      void addHistory(gif);
+    },
+    [addHistory]
+  );
+
   const handleLogout = async () => {
     await signOut();
     setSelectedGif(null);
@@ -902,7 +910,7 @@ export default function App() {
             searchQuery={searchQuery}
             activeCategory={activeCategory}
             offset={offset}
-            addHistory={addHistory}
+            addHistory={handleSelectGif}
             isFavourited={isFavourited}
             handleToggleFavourite={handleToggleFavouriteFromDiscover}
             workspace={workspace}
@@ -937,7 +945,7 @@ export default function App() {
             filteredFavourites={filteredFavourites}
             queuedGifs={queuedGifs}
             handleClearAll={handleClearAll}
-            addHistory={addHistory}
+            addHistory={handleSelectGif}
             handleToggleFavourite={handleToggleFavourite}
             isQueued={isQueued}
             handleQueueToggle={handleQueueToggle}
