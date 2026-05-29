@@ -15,6 +15,7 @@ import type {
   PublicUserProfile,
   ToastProps,
   MoodFilter,
+  FavouriteSortOption,
 } from "./types";
 
 import { useGiphy } from "./hooks/useGiphy";
@@ -83,6 +84,8 @@ export default function App() {
   const [filterRating, setFilterRating] = useState("all");
   const [filterUsername, setFilterUsername] = useState("all");
   const [moodFilter, setMoodFilter] = useState<MoodFilter>("all");
+  const [sortOption, setSortOption] = useState<FavouriteSortOption>("date-added-desc");
+  const [shuffleSeed, setShuffleSeed] = useState(0);
 
   const [toast, setToast] = useState<ToastProps>({ message: "", type: "success", visible: false });
   const showToast = useCallback((message: string, type: ToastProps["type"] = "success") => {
@@ -485,12 +488,44 @@ export default function App() {
     [favourites]
   );
 
+  const topTags = useMemo(() => {
+    const counts: Record<string, number> = {};
+    favourites.forEach((gif) => {
+      const meta = workspace.gifMeta[gif.id];
+      if (meta && meta.tags) {
+        meta.tags.forEach((tag) => {
+          const clicks = workspace.clickCounts[gif.id] || 1;
+          counts[tag] = (counts[tag] || 0) + clicks;
+        });
+      }
+    });
+    return Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([tag]) => tag);
+  }, [favourites, workspace.gifMeta, workspace.clickCounts]);
+
+  const topCreators = useMemo(() => {
+    const counts: Record<string, number> = {};
+    favourites.forEach((gif) => {
+      if (gif.username) {
+        const clicks = workspace.clickCounts[gif.id] || 1;
+        counts[gif.username] = (counts[gif.username] || 0) + clicks;
+      }
+    });
+    return Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([username]) => username);
+  }, [favourites, workspace.clickCounts]);
+
   const filteredFavourites = useMemo(() => {
     const selectedCollectionId = filterCollectionId === "all" ? null : filterCollectionId;
     const ids = selectedCollectionId
       ? workspace.collections.find((collection) => collection.id === selectedCollectionId)?.gifIds ?? []
       : null;
-    return favourites.filter((gif) => {
+    
+    const filtered = favourites.filter((gif) => {
       const meta = workspace.gifMeta[gif.id];
       const haystack = `${gif.title} ${gif.username} ${meta?.notes ?? ""} ${(meta?.tags ?? []).join(" ")}`.toLowerCase();
       if (favouriteSearch && !haystack.includes(favouriteSearch.toLowerCase())) return false;
@@ -500,7 +535,89 @@ export default function App() {
       if (ids && !ids.includes(gif.id)) return false;
       return true;
     });
-  }, [favourites, workspace, favouriteSearch, filterTag, filterRating, filterUsername, filterCollectionId]);
+
+    if (sortOption === "date-added-asc") {
+      filtered.sort((a, b) => {
+        const timeA = new Date(workspace.gifMeta[a.id]?.addedAt || 0).getTime();
+        const timeB = new Date(workspace.gifMeta[b.id]?.addedAt || 0).getTime();
+        return timeA - timeB;
+      });
+    } else if (sortOption === "date-added-desc") {
+      filtered.sort((a, b) => {
+        const timeA = new Date(workspace.gifMeta[a.id]?.addedAt || 0).getTime();
+        const timeB = new Date(workspace.gifMeta[b.id]?.addedAt || 0).getTime();
+        return timeB - timeA;
+      });
+    } else if (sortOption === "most-used") {
+      filtered.sort((a, b) => {
+        const clicksA = workspace.clickCounts[a.id] || 0;
+        const clicksB = workspace.clickCounts[b.id] || 0;
+        if (clicksA !== clicksB) return clicksB - clicksA;
+        const timeA = new Date(workspace.gifMeta[a.id]?.addedAt || 0).getTime();
+        const timeB = new Date(workspace.gifMeta[b.id]?.addedAt || 0).getTime();
+        return timeB - timeA;
+      });
+    } else if (sortOption === "alphabetical") {
+      filtered.sort((a, b) => {
+        const titleA = (a.title || "").toLowerCase();
+        const titleB = (b.title || "").toLowerCase();
+        return titleA.localeCompare(titleB);
+      });
+    } else if (sortOption === "smart-recommendations") {
+      const getScore = (gif: Gif) => {
+        let score = 0;
+        const clicks = workspace.clickCounts[gif.id] || 0;
+        score += clicks * 2;
+        
+        const meta = workspace.gifMeta[gif.id];
+        if (meta && meta.tags) {
+          meta.tags.forEach((tag) => {
+            if (topTags.includes(tag)) {
+              score += 3;
+            }
+          });
+        }
+        if (gif.username && topCreators.includes(gif.username)) {
+          score += 5;
+        }
+        return score;
+      };
+      
+      filtered.sort((a, b) => {
+        const scoreA = getScore(a);
+        const scoreB = getScore(b);
+        if (scoreA !== scoreB) return scoreB - scoreA;
+        const timeA = new Date(workspace.gifMeta[a.id]?.addedAt || 0).getTime();
+        const timeB = new Date(workspace.gifMeta[b.id]?.addedAt || 0).getTime();
+        return timeB - timeA;
+      });
+    } else if (sortOption === "shuffle") {
+      const seed = shuffleSeed;
+      const getRand = (str: string) => {
+        let hash = 0;
+        const combined = str + seed.toString();
+        for (let i = 0; i < combined.length; i++) {
+          hash = combined.charCodeAt(i) + ((hash << 5) - hash);
+        }
+        return Math.abs(hash % 1000) / 1000;
+      };
+      filtered.sort((a, b) => getRand(a.id) - getRand(b.id));
+    }
+
+    return filtered;
+  }, [
+    favourites,
+    workspace,
+    favouriteSearch,
+    filterTag,
+    filterRating,
+    filterUsername,
+    filterCollectionId,
+    sortOption,
+    shuffleSeed,
+    topTags,
+    topCreators,
+  ]);
 
   const queuedGifs = useMemo(
     () => favourites.filter((gif) => workspace.gifMeta[gif.id]?.useLater),
@@ -961,6 +1078,9 @@ export default function App() {
             setFilterRating={setFilterRating}
             filterUsername={filterUsername}
             setFilterUsername={setFilterUsername}
+            sortOption={sortOption}
+            setSortOption={setSortOption}
+            onReshuffle={() => setShuffleSeed((s) => s + 1)}
             workspace={workspace}
             allTags={allTags}
             allUsernames={allUsernames}

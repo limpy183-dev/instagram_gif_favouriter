@@ -1,4 +1,4 @@
-import type { Gif, Workspace } from "../types";
+import type { Gif, Workspace, FavouriteSortOption } from "../types";
 import { GifCard } from "../components/GifCard";
 import { SectionCard } from "../components/CardComponents";
 
@@ -13,6 +13,9 @@ interface FavouritesPageProps {
   setFilterRating: (value: string) => void;
   filterUsername: string;
   setFilterUsername: (value: string) => void;
+  sortOption: FavouriteSortOption;
+  setSortOption: (value: FavouriteSortOption) => void;
+  onReshuffle: () => void;
   workspace: Workspace;
   allTags: string[];
   allUsernames: string[];
@@ -46,6 +49,9 @@ export function FavouritesPage({
   setFilterRating,
   filterUsername,
   setFilterUsername,
+  sortOption,
+  setSortOption,
+  onReshuffle,
   workspace,
   allTags,
   allUsernames,
@@ -126,7 +132,31 @@ export function FavouritesPage({
                 </option>
               ))}
             </select>
-            <div className="panel-muted xl:col-span-4">
+            <div className="flex gap-2">
+              <select
+                value={sortOption}
+                onChange={(e) => setSortOption(e.target.value as FavouriteSortOption)}
+                className="field flex-1"
+              >
+                <option value="date-added-desc">📅 Date added (Newest)</option>
+                <option value="date-added-asc">📅 Date added (Oldest)</option>
+                <option value="most-used">🔥 Most Used (Clicked)</option>
+                <option value="alphabetical">🔤 Alphabetical (A-Z)</option>
+                <option value="smart-recommendations">✨ Recommended for you</option>
+                <option value="shuffle">🔀 Shuffle list</option>
+              </select>
+              {sortOption === "shuffle" && (
+                <button
+                  type="button"
+                  onClick={onReshuffle}
+                  className="secondary-btn px-3.5 flex items-center justify-center hover:bg-zinc-800 transition-colors"
+                  title="Reshuffle favourites"
+                >
+                  🔄
+                </button>
+              )}
+            </div>
+            <div className="panel-muted xl:col-span-3">
               Public collections are shareable via `#/collections/{"{id}"}` links and load without needing the signed-in
               workspace.
             </div>

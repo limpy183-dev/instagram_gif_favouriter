@@ -102,6 +102,7 @@ export function createDefaultWorkspace(): Workspace {
       publicFavourites: true,
     },
     manualImports: [],
+    clickCounts: {},
   };
 }
 
@@ -317,8 +318,7 @@ export function useWorkspace(
         .from("view_history")
         .select("gif_id, viewed_at")
         .eq("user_id", user.id)
-        .order("viewed_at", { ascending: false })
-        .limit(30),
+        .order("viewed_at", { ascending: false }),
       supabase.from("gif_assets").select("gif_id, gif_data").eq("user_id", user.id),
     ]);
 
@@ -344,6 +344,7 @@ export function useWorkspace(
           ? { ...defaultWorkspace.profile, ...cachedWorkspace.profile }
           : defaultWorkspace.profile,
         manualImports: (cachedWorkspace.manualImports as Gif[] | undefined) ?? [],
+        clickCounts: cachedWorkspace.clickCounts ?? {},
       });
       setWorkspaceOffline(true);
       setWorkspaceLoading(false);
@@ -359,6 +360,11 @@ export function useWorkspace(
     const metadataRows = (metadataRes.data ?? []) as GifMetadataRow[];
     const historyRows = (historyRes.data ?? []) as HistoryRow[];
     const assetRows = (assetsRes.data ?? []) as GifAssetRow[];
+
+    const clickCounts: Record<string, number> = {};
+    historyRows.forEach((row) => {
+      clickCounts[row.gif_id] = (clickCounts[row.gif_id] || 0) + 1;
+    });
 
     const collectionMap = new Map<string, string[]>();
     itemRows.forEach((item) => {
@@ -406,7 +412,7 @@ export function useWorkspace(
     const nextWorkspace: Workspace = {
       collections: mergedCollections,
       gifMeta,
-      history: historyRows.map((row) => ({ gifId: row.gif_id, viewedAt: row.viewed_at })),
+      history: historyRows.slice(0, 30).map((row) => ({ gifId: row.gif_id, viewedAt: row.viewed_at })),
       profile: {
         displayName: profile?.display_name ?? cachedWorkspace?.profile?.displayName ?? defaultWorkspace.profile.displayName,
         avatarUrl: persistedAvatar,
@@ -418,6 +424,7 @@ export function useWorkspace(
         publicFavourites: profile?.public_favourites ?? cachedWorkspace?.profile?.publicFavourites ?? defaultWorkspace.profile.publicFavourites,
       },
       manualImports,
+      clickCounts,
     };
 
     const queueCollection = nextWorkspace.collections.find((c) => c.id === QUEUE_COLLECTION_ID);
@@ -534,6 +541,10 @@ export function useWorkspace(
         { gifId: gif.id, viewedAt: new Date().toISOString() },
         ...current.history.filter((item) => item.gifId !== gif.id),
       ].slice(0, 30),
+      clickCounts: {
+        ...current.clickCounts,
+        [gif.id]: (current.clickCounts[gif.id] || 0) + 1,
+      },
     }));
     await saveHistory(gif.id);
   };

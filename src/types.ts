@@ -1,6 +1,7 @@
 export type Page = 'discover' | 'favourites' | 'toolbox' | 'profile' | 'users';
 export type MoodFilter = 'all' | 'savage' | 'wholesome' | 'awkward' | 'excited' | 'chaotic' | 'flirty';
 export type SyncStatus = 'live' | 'partial' | 'offline';
+export type FavouriteSortOption = 'date-added-desc' | 'date-added-asc' | 'most-used' | 'alphabetical' | 'smart-recommendations' | 'shuffle';
 
 export interface GifImage {
   url: string;
@@ -70,6 +71,7 @@ export interface Workspace {
   history: HistoryEntry[];
   profile: ProfileSettings;
   manualImports: Gif[];
+  clickCounts: Record<string, number>;
 }
 
 export interface GiphyUsage {
