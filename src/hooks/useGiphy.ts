@@ -8,6 +8,7 @@ const GIPHY_KEYS = [
   import.meta.env.VITE_GIPHY_API_KEY_4 as string | undefined,
   import.meta.env.VITE_GIPHY_API_KEY as string | undefined,
 ].filter((key): key is string => Boolean(key));
+console.log("Loaded GIPHY_KEYS:", GIPHY_KEYS);
 
 const LIMIT = 24;
 const GIPHY_USAGE_KEY = "gif_studio_giphy_usage";
@@ -166,6 +167,7 @@ export function useGiphy(
         setHasMore(data.length === LIMIT);
         setOffset(newOffset + LIMIT);
       } catch (error) {
+        console.error("Giphy fetch error in hook:", error);
         const currentUsage = readGiphyUsage();
         const failedUsage = {
           ...currentUsage,
