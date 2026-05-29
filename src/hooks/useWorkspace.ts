@@ -157,20 +157,32 @@ export function useWorkspace(
     async (profile: ProfileSettings) => {
       if (!user) return;
       const nextProfile = { ...profile, avatarUrl: profile.avatarUrl.trim() };
-      await supabase.from("profiles").upsert(
-        {
-          user_id: user.id,
-          display_name: nextProfile.displayName,
-          avatar_url: normalizeAvatarUrl(nextProfile.avatarUrl),
-          accent: nextProfile.accent,
-          landing_page: nextProfile.landingPage,
-          helper_mode: nextProfile.helperMode,
-          offline_cache: nextProfile.offlineCache,
-          public_profile: nextProfile.publicProfile,
-          public_favourites: nextProfile.publicFavourites,
-        },
-        { onConflict: "user_id" }
-      );
+      
+      const payload: any = {
+        id: user.id,
+        display_name: nextProfile.displayName,
+        avatar_url: normalizeAvatarUrl(nextProfile.avatarUrl),
+        accent: nextProfile.accent,
+        landing_page: nextProfile.landingPage,
+        helper_mode: nextProfile.helperMode,
+        offline_cache: nextProfile.offlineCache,
+        public_profile: nextProfile.publicProfile,
+        public_favourites: nextProfile.publicFavourites,
+      };
+
+      const { error } = await supabase.from("profiles").upsert(payload, { onConflict: "id" });
+
+      if (error && (error.message?.includes("public_profile") || error.message?.includes("public_favourites"))) {
+        console.warn("Failed to upsert profiles with privacy columns, falling back...", error);
+        delete payload.public_profile;
+        delete payload.public_favourites;
+        const { error: fallbackError } = await supabase.from("profiles").upsert(payload, { onConflict: "id" });
+        if (fallbackError) {
+          console.error("Fallback saveProfile failed:", fallbackError);
+        }
+      } else if (error) {
+        console.error("saveProfile failed:", error);
+      }
     },
     [user]
   );
@@ -245,14 +257,36 @@ export function useWorkspace(
   const loadWorkspace = useCallback(async () => {
     if (!user) return;
     setWorkspaceLoading(true);
-    const [profileRes, collectionsRes, itemsRes, metadataRes, historyRes, assetsRes] = await Promise.all([
-      supabase
+
+    const fetchProfileRow = async () => {
+      const res = await supabase
         .from("profiles")
         .select(
           "display_name, avatar_url, accent, landing_page, helper_mode, offline_cache, public_profile, public_favourites"
         )
-        .eq("user_id", user.id)
-        .maybeSingle(),
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (
+        res.error &&
+        (res.error.message?.includes("public_profile") ||
+          res.error.message?.includes("public_favourites"))
+      ) {
+        console.warn(
+          "Profiles columns public_profile/public_favourites not found, falling back...",
+          res.error
+        );
+        return supabase
+          .from("profiles")
+          .select("display_name, avatar_url, accent, landing_page, helper_mode, offline_cache")
+          .eq("id", user.id)
+          .maybeSingle();
+      }
+      return res;
+    };
+
+    const [profileRes, collectionsRes, itemsRes, metadataRes, historyRes, assetsRes] = await Promise.all([
+      fetchProfileRow(),
       supabase.from("collections").select("id, name, description, color, is_public").eq("user_id", user.id),
       supabase
         .from("collection_items")

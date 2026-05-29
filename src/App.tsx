@@ -155,38 +155,68 @@ export default function App() {
 
   const route = useMemo(parseHashRoute, [window.location.hash]);
 
-  const searchUsers = useCallback(async (query: string) => {
+  const searchUsers = useCallback(async (query: string = "") => {
     const trimmed = query.trim();
-    if (!trimmed) {
-      setUserResults([]);
-      return;
-    }
     setUserSearchLoading(true);
-    // Bug A Fix: Filter query by public_profile = true
-    const { data } = await supabase
+    
+    let queryBuilder = supabase
       .from("profiles")
-      .select("user_id, display_name, avatar_url, accent, public_profile, public_favourites")
-      .eq("public_profile", true)
-      .or(`display_name.ilike.%${trimmed}%,user_id.ilike.%${trimmed}%`)
-      .limit(20);
+      .select("user_id:id, display_name, avatar_url, accent, public_profile, public_favourites");
 
-    setUserResults(
-      (
-        (data ?? []) as Array<{
-          user_id: string;
-          display_name: string | null;
-          avatar_url: string | null;
-          accent: string | null;
-          public_favourites: boolean | null;
-        }>
-      ).map((row) => ({
-        userId: row.user_id,
-        displayName: row.display_name ?? "Creator",
-        avatarUrl: normalizeAvatarUrl(row.avatar_url ?? ""),
-        accent: row.accent ?? "#a855f7",
-        publicFavourites: row.public_favourites ?? false, // Bug A Fix: Map publicFavourites DB column
-      }))
-    );
+    if (trimmed) {
+      queryBuilder = queryBuilder.or(`display_name.ilike.%${trimmed}%,id.ilike.%${trimmed}%`);
+    }
+
+    // Filter by public_profile = true or public_profile IS NULL (by default they are public)
+    queryBuilder = queryBuilder.or("public_profile.eq.true,public_profile.is.null");
+
+    const { data, error } = await queryBuilder.limit(20);
+
+    if (error) {
+      console.warn("Profiles query failed, falling back to query without privacy columns...", error);
+      let fallbackQuery = supabase
+        .from("profiles")
+        .select("user_id:id, display_name, avatar_url, accent");
+
+      if (trimmed) {
+        fallbackQuery = fallbackQuery.or(`display_name.ilike.%${trimmed}%,id.ilike.%${trimmed}%`);
+      }
+
+      const { data: fallbackData, error: fallbackError } = await fallbackQuery.limit(20);
+
+      if (fallbackError) {
+        console.error("Fallback profiles search failed:", fallbackError);
+        setUserResults([]);
+      } else {
+        setUserResults(
+          ((fallbackData ?? []) as Array<{ user_id: string; display_name: string | null; avatar_url: string | null; accent: string | null }>).map((row) => ({
+            userId: row.user_id,
+            displayName: row.display_name ?? "Creator",
+            avatarUrl: normalizeAvatarUrl(row.avatar_url ?? ""),
+            accent: row.accent ?? "#a855f7",
+            publicFavourites: true, // assume true if DB doesn't track it
+          }))
+        );
+      }
+    } else {
+      setUserResults(
+        (
+          (data ?? []) as Array<{
+            user_id: string;
+            display_name: string | null;
+            avatar_url: string | null;
+            accent: string | null;
+            public_favourites: boolean | null;
+          }>
+        ).map((row) => ({
+          userId: row.user_id,
+          displayName: row.display_name ?? "Creator",
+          avatarUrl: normalizeAvatarUrl(row.avatar_url ?? ""),
+          accent: row.accent ?? "#a855f7",
+          publicFavourites: row.public_favourites ?? false,
+        }))
+      );
+    }
     setUserSearchLoading(false);
   }, []);
 
@@ -237,25 +267,49 @@ export default function App() {
 
   const loadPublicUser = useCallback(async (userId: string) => {
     setSelectedUserLoading(true);
-    const { data: profile } = await supabase
+    let { data: profile, error } = await supabase
       .from("profiles")
       .select("user_id, display_name, avatar_url, accent, public_profile, public_favourites")
       .eq("user_id", userId)
       .maybeSingle();
 
-    if (!profile) {
-      setSelectedUserProfile(null);
-      setSelectedUserCollections([]);
-      setSelectedUserFavourites([]);
-      setSelectedUserLoading(false);
-      return;
+    let publicFavouritesVal = false;
+
+    if (error) {
+      console.warn("Failed to fetch public user with privacy columns, retrying fallback...", error);
+      const { data: fallbackProfile, error: fallbackError } = await supabase
+        .from("profiles")
+        .select("user_id, display_name, avatar_url, accent")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (fallbackError || !fallbackProfile) {
+        console.error("Fallback loadPublicUser query failed:", fallbackError);
+        setSelectedUserProfile(null);
+        setSelectedUserCollections([]);
+        setSelectedUserFavourites([]);
+        setSelectedUserLoading(false);
+        return;
+      }
+      profile = fallbackProfile as any;
+      publicFavouritesVal = true; // Assume true if columns are not present in DB yet
+    } else {
+      if (!profile) {
+        setSelectedUserProfile(null);
+        setSelectedUserCollections([]);
+        setSelectedUserFavourites([]);
+        setSelectedUserLoading(false);
+        return;
+      }
+      publicFavouritesVal = profile.public_favourites ?? false;
     }
+
     const publicProfile: PublicUserProfile = {
       userId: profile.user_id,
       displayName: profile.display_name ?? "Creator",
       avatarUrl: normalizeAvatarUrl(profile.avatar_url ?? ""),
       accent: profile.accent ?? "#a855f7",
-      publicFavourites: profile.public_favourites ?? false, // Bug A Fix: Load from DB profiles table
+      publicFavourites: publicFavouritesVal,
     };
     setSelectedUserProfile(publicProfile);
 
@@ -295,7 +349,7 @@ export default function App() {
     );
 
     // Bug A Fix: Read and populate selectedUserProfile favourites if allowed
-    if (profile.public_favourites) {
+    if (publicFavouritesVal) {
       const { data: favouritesRes } = await supabase
         .from("favourites")
         .select("gif_id, gif_data")
@@ -313,6 +367,12 @@ export default function App() {
   useEffect(() => {
     if (user) fetchGifs("", "", 0);
   }, [user, fetchGifs]);
+
+  useEffect(() => {
+    if (page === "users") {
+      void searchUsers(userSearch);
+    }
+  }, [page, searchUsers, userSearch]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
