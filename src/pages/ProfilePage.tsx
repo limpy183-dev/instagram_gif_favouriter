@@ -57,6 +57,26 @@ export function ProfilePage({ workspace, updateProfileField, user, gifMap, giphy
               Your profile name, avatar, favourites, collections, metadata, and history are all saved against this signed-in
               account.
             </div>
+            
+            <div className="p-3.5 bg-amber-500/10 border border-amber-500/20 rounded-2xl text-xs space-y-2 mt-4 text-left">
+              <span className="font-semibold text-amber-200 block">⚠️ Favourites Missing?</span>
+              <p className="text-zinc-400 leading-normal">
+                If your favourites disappeared after signing in with Google, you might have signed into a different account.
+              </p>
+              <p className="text-zinc-400 leading-normal">
+                Your data is safe under your original credentials! Try logging out and signing in using your original <strong>Email & Password</strong> account.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  localStorage.removeItem("gif_studio_favourites_migrated");
+                  window.location.reload();
+                }}
+                className="text-[10px] font-semibold text-amber-200 bg-amber-500/20 hover:bg-amber-500/30 px-2.5 py-1.5 rounded-xl transition-all duration-200"
+              >
+                🔄 Reset Local Migration Flag & Reload
+              </button>
+            </div>
           </div>
           <input
             value={profile.displayName}
