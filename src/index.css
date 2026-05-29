@@ -81,6 +81,13 @@ body::before {
   outline-offset: 2px;
 }
 
+/* Prevent outline on text fields, selects, and textareas since they have custom focus styles */
+input:not([type="checkbox"]):not([type="radio"]):focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: none;
+}
+
 /* ---------- Masonry ---------- */
 .masonry-grid {
   columns: 2;
