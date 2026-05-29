@@ -1,5 +1,6 @@
+import * as React from 'react';
 import type { FormEvent } from 'react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from './utils/supabase';
 
 function getAppRedirectUrl() {
@@ -60,7 +61,7 @@ export default function AuthPage() {
   const [successMsg, setSuccessMsg] = useState('');
   const [showResendEmail, setShowResendEmail] = useState(false);
 
-  React.useEffect(() => {
+  useEffect(() => {
     const savedError = localStorage.getItem('gif_studio_google_login_error');
     if (savedError) {
       setError(savedError);
