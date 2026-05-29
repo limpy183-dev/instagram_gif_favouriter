@@ -2,10 +2,11 @@ import type { FormEvent } from 'react';
 import { useState } from 'react';
 import { supabase } from './utils/supabase';
 
-const APP_BASE_PATH = import.meta.env.PROD ? '/instagram_gif_favouriter/' : '/';
-
 function getAppRedirectUrl() {
-  return new URL(APP_BASE_PATH, window.location.origin).toString();
+  const path = window.location.pathname.startsWith('/instagram_gif_favouriter')
+    ? '/instagram_gif_favouriter/'
+    : '/';
+  return new URL(path, window.location.origin).toString();
 }
 
 function SparkleIcon() {
@@ -118,20 +119,26 @@ export default function AuthPage() {
     setSuccessMsg('Confirmation email resent. Check your inbox and spam folder, then sign in after confirming.');
   };
 
-  const handleGoogleLogin = async () => {
+  const handleGoogleLogin = async (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault();
     setGoogleLoading(true);
     clearMessages();
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: getAppRedirectUrl(),
-      },
-    });
-    if (error) {
-      setError(error.message);
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: getAppRedirectUrl(),
+        },
+      });
+      if (error) {
+        setError(error.message);
+        setGoogleLoading(false);
+      }
+    } catch (err: any) {
+      console.error("Google login redirect failed:", err);
+      setError(err.message || 'An unexpected error occurred during Google sign in.');
       setGoogleLoading(false);
     }
-    // On success, Supabase redirects the browser — no need to do anything else
   };
 
   const handleSubmit = async (e: FormEvent) => {
@@ -214,6 +221,7 @@ export default function AuthPage() {
           {mode !== 'forgot' && (
             <>
               <button
+                type="button"
                 onClick={handleGoogleLogin}
                 disabled={googleLoading || loading}
                 className="w-full flex items-center justify-center gap-3 bg-white hover:bg-zinc-100 text-zinc-900 font-semibold py-3 px-4 rounded-2xl transition-all duration-200 hover:scale-[1.02] disabled:opacity-60 disabled:scale-100 mb-4"
