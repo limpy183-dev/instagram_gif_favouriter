@@ -961,7 +961,18 @@ export default function App() {
     });
   }, [favourites, workspace, favouriteSearch, filterTag, filterRating, filterUsername, filterCollectionId]);
   const queuedGifs = useMemo(() => favourites.filter((gif) => workspace.gifMeta[gif.id]?.useLater), [favourites, workspace.gifMeta]);
-  const recentHistory = useMemo(() => workspace.history.map((entry) => gifMap[entry.gifId]).filter(Boolean).slice(0, 12), [workspace.history, gifMap]);
+  const recentHistory = useMemo(() => {
+    const seen = new Set<string>();
+    const uniqueGifs: Gif[] = [];
+    for (const entry of workspace.history) {
+      const gif = gifMap[entry.gifId];
+      if (gif && !seen.has(gif.id)) {
+        seen.add(gif.id);
+        uniqueGifs.push(gif);
+      }
+    }
+    return uniqueGifs.slice(0, 12);
+  }, [workspace.history, gifMap]);
   const publicCollections = useMemo(() => workspace.collections.filter((collection) => collection.isPublic), [workspace.collections]);
   const analytics = useMemo(() => ({ totalSaved: favourites.length, queued: queuedGifs.length, importedCount: Object.values(workspace.gifMeta).filter((meta) => meta.imported).length, topTag: allTags[0] ?? 'none' }), [favourites.length, queuedGifs.length, workspace.gifMeta, allTags]);
   const syncStatus: SyncStatus = workspaceOffline && favouritesOffline ? 'offline' : workspaceOffline || favouritesOffline ? 'partial' : 'live';
