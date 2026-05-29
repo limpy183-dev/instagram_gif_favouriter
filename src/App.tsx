@@ -422,9 +422,21 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const isAuthCallback = window.location.hash.includes("access_token=") || 
-                           window.location.hash.includes("error=") ||
-                           window.location.hash.includes("refresh_token=");
+    const hash = window.location.hash;
+    const isAuthCallback = hash.includes("access_token=") || 
+                           hash.includes("error=") ||
+                           hash.includes("refresh_token=");
+
+    if (hash.includes("error=")) {
+      // Parse query params from the hash string (replacing # with ?)
+      const params = new URLSearchParams(hash.replace(/^#/, "?"));
+      const errorTitle = params.get("error") || "Auth Error";
+      const errorDesc = params.get("error_description") || "OAuth Redirect Failure";
+      localStorage.setItem("gif_studio_google_login_error", `${errorTitle}: ${errorDesc}`);
+      // Clean URL hash
+      window.location.hash = "#/discover";
+      return;
+    }
 
     if (isAuthCallback && user) {
       // Clean up the URL hash after successful login
