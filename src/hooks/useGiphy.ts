@@ -9,6 +9,7 @@ const GIPHY_KEYS = [
   import.meta.env.VITE_GIPHY_API_KEY_5 as string | undefined,
   import.meta.env.VITE_GIPHY_API_KEY as string | undefined,
 ].filter((key): key is string => Boolean(key));
+// Log to console so developer can verify that keys are being injected from secrets in production
 console.log("Loaded GIPHY_KEYS:", GIPHY_KEYS);
 
 const LIMIT = 24;
