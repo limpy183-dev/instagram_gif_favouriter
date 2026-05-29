@@ -74,6 +74,7 @@ export interface GifMeta {
   imported: boolean;
   customSourceUrl?: string;
   collectionIds: string[];
+  searchTerms: string[];
 }
 
 interface HistoryEntry {
@@ -142,6 +143,7 @@ interface GifMetadataRow {
   use_later: boolean;
   imported: boolean;
   custom_source_url: string | null;
+  search_terms: string[] | null;
   updated_at: string;
 }
 
@@ -329,7 +331,7 @@ export function GifCard({ gif, index, onSelect, isFavourited, onToggleFavourite,
   );
 }
 
-function GifModal({ gif, onClose, onCopy, isFavourited, onToggleFavourite, note, tags, onUpdateNote, onAddTag }: {
+function GifModal({ gif, onClose, onCopy, isFavourited, onToggleFavourite, note, tags, searchTerms, onUpdateNote, onAddTag, onRemoveSearchTerm }: {
   gif: Gif | null;
   onClose: () => void;
   onCopy: (text: string, label?: string) => void;
@@ -337,8 +339,10 @@ function GifModal({ gif, onClose, onCopy, isFavourited, onToggleFavourite, note,
   onToggleFavourite: (gif: Gif) => void;
   note: string;
   tags: string[];
+  searchTerms: string[];
   onUpdateNote: (gif: Gif, note: string) => void;
   onAddTag: (gif: Gif, tag: string) => void;
+  onRemoveSearchTerm: (gif: Gif, term: string) => void;
 }) {
   const [draftTag, setDraftTag] = useState('');
   const backdropRef = useRef<HTMLDivElement>(null);
@@ -371,6 +375,19 @@ function GifModal({ gif, onClose, onCopy, isFavourited, onToggleFavourite, note,
               <p className="text-[#ffc2d2] text-xs font-semibold mb-1">Instagram Reel Comment Search</p>
               <p className="text-[var(--text-muted)] text-xs leading-relaxed">Search <span className="text-white font-medium bg-white/10 px-1.5 py-0.5 rounded">{`"${searchName}"`}</span> when commenting on Reels.</p>
             </div>
+            {searchTerms.length > 0 && (
+              <div className="rounded-xl px-4 py-3 mb-4 border border-white/10 bg-white/5">
+                <p className="text-white text-xs font-semibold mb-2">Found via search</p>
+                <div className="flex flex-wrap gap-2">
+                  {searchTerms.map((term) => (
+                    <span key={term} className="chip flex items-center gap-1.5">
+                      <span>{term}</span>
+                      <button onClick={() => onRemoveSearchTerm(gif, term)} className="text-white/60 hover:text-white" aria-label={`Remove search term ${term}`}><XIcon /></button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="grid grid-cols-3 gap-2 mb-4">
               <button onClick={() => onCopy(searchName, 'Name')} className="tool-btn"><InstagramIcon />Copy Name</button>
               <button onClick={() => onCopy(gif.images.fixed_height.url, 'URL')} className="tool-btn"><CopyIcon />Copy URL</button>
@@ -581,7 +598,7 @@ export default function App() {
       supabase.from('profiles').select('display_name, avatar_url, accent, landing_page, helper_mode, offline_cache').eq('user_id', user.id).maybeSingle(),
       supabase.from('collections').select('id, name, description, color, is_public').eq('user_id', user.id),
       supabase.from('collection_items').select('collection_id, gif_id, position').eq('user_id', user.id).order('position', { ascending: true }),
-      supabase.from('gif_metadata').select('gif_id, notes, tags, use_later, imported, custom_source_url, updated_at').eq('user_id', user.id),
+      supabase.from('gif_metadata').select('gif_id, notes, tags, use_later, imported, custom_source_url, search_terms, updated_at').eq('user_id', user.id),
       supabase.from('view_history').select('gif_id, viewed_at').eq('user_id', user.id).order('viewed_at', { ascending: false }).limit(30),
     ]);
 
@@ -640,6 +657,7 @@ export default function App() {
         imported: row.imported,
         customSourceUrl: row.custom_source_url ?? undefined,
         collectionIds: mergedCollections.filter((collection) => collection.gifIds.includes(row.gif_id)).map((collection) => collection.id),
+        searchTerms: row.search_terms ?? [],
       };
     });
 
@@ -694,7 +712,7 @@ export default function App() {
 
   const saveGifMeta = useCallback(async (gifId: string, meta: GifMeta) => {
     if (!user) return;
-    await supabase.from('gif_metadata').upsert({ user_id: user.id, gif_id: gifId, notes: meta.notes, tags: meta.tags, use_later: meta.useLater, imported: meta.imported, custom_source_url: meta.customSourceUrl ?? null }, { onConflict: 'user_id,gif_id' });
+    await supabase.from('gif_metadata').upsert({ user_id: user.id, gif_id: gifId, notes: meta.notes, tags: meta.tags, use_later: meta.useLater, imported: meta.imported, custom_source_url: meta.customSourceUrl ?? null, search_terms: meta.searchTerms ?? [] }, { onConflict: 'user_id,gif_id' });
   }, [user]);
 
   const saveGifAsset = useCallback(async (gif: Gif) => {
@@ -921,7 +939,7 @@ export default function App() {
   const ensureMeta = useCallback((gif: Gif) => {
     setWorkspace((current) => {
       if (current.gifMeta[gif.id]) return current;
-      return { ...current, gifMeta: { ...current.gifMeta, [gif.id]: { tags: [], notes: '', addedAt: new Date().toISOString(), useLater: false, imported: gif.username === 'manual-import', customSourceUrl: gif.username === 'manual-import' ? gif.images.original.url : undefined, collectionIds: [DEFAULT_COLLECTION_ID] } } };
+      return { ...current, gifMeta: { ...current.gifMeta, [gif.id]: { tags: [], notes: '', addedAt: new Date().toISOString(), useLater: false, imported: gif.username === 'manual-import', customSourceUrl: gif.username === 'manual-import' ? gif.images.original.url : undefined, collectionIds: [DEFAULT_COLLECTION_ID], searchTerms: [] } } };
     });
   }, []);
 
@@ -956,7 +974,7 @@ export default function App() {
 
   const updateMeta = async (gif: Gif, updater: (meta: GifMeta) => GifMeta) => {
     ensureMeta(gif);
-    const nextMeta = updater(workspace.gifMeta[gif.id] ?? { tags: [], notes: '', addedAt: new Date().toISOString(), useLater: false, imported: false, collectionIds: [DEFAULT_COLLECTION_ID] });
+    const nextMeta = updater(workspace.gifMeta[gif.id] ?? { tags: [], notes: '', addedAt: new Date().toISOString(), useLater: false, imported: false, collectionIds: [DEFAULT_COLLECTION_ID], searchTerms: [] });
     setWorkspace((current) => ({ ...current, gifMeta: { ...current.gifMeta, [gif.id]: nextMeta } }));
     await saveGifMeta(gif.id, nextMeta);
   };
@@ -972,6 +990,16 @@ export default function App() {
   const isFavourited = (id: string) => favourites.some((gif) => gif.id === id);
   const isQueued = (id: string) => workspace.gifMeta[id]?.useLater ?? false;
   const currentLabel = searchQuery ? `Results for "${searchQuery}"` : activeCategory ? CATEGORIES.find((category) => category.value === activeCategory)?.label || 'GIFs' : '🔥 Trending Now';
+  const currentSearchTerm = useMemo(() => {
+    const trimmed = searchQuery.trim();
+    if (trimmed) return trimmed;
+    if (activeCategory) {
+      const categoryLabel = CATEGORIES.find((category) => category.value === activeCategory)?.label;
+      return (categoryLabel?.replace(/^[^\w]+/, '').trim()) || activeCategory;
+    }
+    return 'Trending';
+  }, [searchQuery, activeCategory]);
+  const handleToggleFavouriteFromDiscover = (gif: Gif) => { void handleToggleFavourite(gif, currentSearchTerm); };
 
   const syncCollection = async (collectionId: string, gifIds: string[]) => {
     const collection = workspace.collections.find((item) => item.id === collectionId);
@@ -985,7 +1013,7 @@ export default function App() {
     await saveGifMeta(gifId, { ...meta, collectionIds: ids });
   };
 
-  const handleToggleFavourite = async (gif: Gif) => {
+  const handleToggleFavourite = async (gif: Gif, searchTerm?: string) => {
     if (!user) return;
     const exists = favourites.some((item) => item.id === gif.id);
     if (exists) {
@@ -1015,23 +1043,26 @@ export default function App() {
     }
     setFavourites((current) => [gif, ...current]);
     ensureMeta(gif);
+    const trimmedSearch = searchTerm?.trim() ?? '';
+    let nextMetaForSync: GifMeta | null = null;
     setWorkspace((current) => {
       const currentDefaultIds = current.collections.find((item) => item.id === DEFAULT_COLLECTION_ID)?.gifIds ?? [];
       const nextDefaultIds = Array.from(new Set([gif.id, ...currentDefaultIds]));
-      const currentMeta = current.gifMeta[gif.id] ?? { tags: [], notes: '', addedAt: new Date().toISOString(), useLater: false, imported: false, collectionIds: [] };
+      const currentMeta = current.gifMeta[gif.id] ?? { tags: [], notes: '', addedAt: new Date().toISOString(), useLater: false, imported: false, collectionIds: [], searchTerms: [] };
+      const nextMeta: GifMeta = {
+        ...currentMeta,
+        collectionIds: Array.from(new Set([DEFAULT_COLLECTION_ID, ...(currentMeta.collectionIds ?? [])])),
+        searchTerms: trimmedSearch ? Array.from(new Set([...(currentMeta.searchTerms ?? []), trimmedSearch])) : (currentMeta.searchTerms ?? []),
+      };
+      nextMetaForSync = nextMeta;
       return {
         ...current,
         collections: current.collections.map((collection) => collection.id === DEFAULT_COLLECTION_ID ? { ...collection, gifIds: nextDefaultIds } : collection),
-        gifMeta: {
-          ...current.gifMeta,
-          [gif.id]: {
-            ...currentMeta,
-            collectionIds: Array.from(new Set([DEFAULT_COLLECTION_ID, ...(currentMeta.collectionIds ?? [])])),
-          },
-        },
+        gifMeta: { ...current.gifMeta, [gif.id]: nextMeta },
       };
     });
     await supabase.from('favourites').upsert({ user_id: user.id, gif_id: gif.id, gif_data: gif }, { onConflict: 'user_id,gif_id' });
+    if (nextMetaForSync) await saveGifMeta(gif.id, nextMetaForSync);
     showToast('Added to Favourites ♥', 'heart');
   };
 
@@ -1040,9 +1071,9 @@ export default function App() {
     const wasQueued = workspace.gifMeta[gif.id]?.useLater ?? false;
     const queueIds = workspace.collections.find((collection) => collection.id === QUEUE_COLLECTION_ID)?.gifIds ?? [];
     const nextQueueIds = wasQueued ? queueIds.filter((id) => id !== gif.id) : [gif.id, ...queueIds.filter((id) => id !== gif.id)];
-    setWorkspace((current) => ({ ...current, collections: current.collections.map((collection) => collection.id === QUEUE_COLLECTION_ID ? { ...collection, gifIds: nextQueueIds } : collection), gifMeta: { ...current.gifMeta, [gif.id]: { ...(current.gifMeta[gif.id] ?? { tags: [], notes: '', addedAt: new Date().toISOString(), useLater: false, imported: false, collectionIds: [] }), useLater: !wasQueued } } }));
+    setWorkspace((current) => ({ ...current, collections: current.collections.map((collection) => collection.id === QUEUE_COLLECTION_ID ? { ...collection, gifIds: nextQueueIds } : collection), gifMeta: { ...current.gifMeta, [gif.id]: { ...(current.gifMeta[gif.id] ?? { tags: [], notes: '', addedAt: new Date().toISOString(), useLater: false, imported: false, collectionIds: [], searchTerms: [] }), useLater: !wasQueued } } }));
     await syncCollection(QUEUE_COLLECTION_ID, nextQueueIds);
-    await saveGifMeta(gif.id, { ...(workspace.gifMeta[gif.id] ?? { tags: [], notes: '', addedAt: new Date().toISOString(), useLater: false, imported: false, collectionIds: [] }), useLater: !wasQueued });
+    await saveGifMeta(gif.id, { ...(workspace.gifMeta[gif.id] ?? { tags: [], notes: '', addedAt: new Date().toISOString(), useLater: false, imported: false, collectionIds: [], searchTerms: [] }), useLater: !wasQueued });
   };
 
   const addCollection = async () => {
@@ -1068,7 +1099,7 @@ export default function App() {
     if (!collection) return;
     const nextGifIds = Array.from(new Set([gif.id, ...collection.gifIds]));
     const nextCollectionIds = Array.from(new Set([collectionId, ...(workspace.gifMeta[gif.id]?.collectionIds ?? [DEFAULT_COLLECTION_ID])]));
-    setWorkspace((current) => ({ ...current, collections: current.collections.map((item) => item.id === collectionId ? { ...item, gifIds: nextGifIds } : item), gifMeta: { ...current.gifMeta, [gif.id]: { ...(current.gifMeta[gif.id] ?? { tags: [], notes: '', addedAt: new Date().toISOString(), useLater: false, imported: false, collectionIds: [] }), collectionIds: nextCollectionIds } } }));
+    setWorkspace((current) => ({ ...current, collections: current.collections.map((item) => item.id === collectionId ? { ...item, gifIds: nextGifIds } : item), gifMeta: { ...current.gifMeta, [gif.id]: { ...(current.gifMeta[gif.id] ?? { tags: [], notes: '', addedAt: new Date().toISOString(), useLater: false, imported: false, collectionIds: [], searchTerms: [] }), collectionIds: nextCollectionIds } } }));
     await syncCollection(collectionId, nextGifIds);
     await updateCollectionIds(gif.id, nextCollectionIds);
     showToast(`Added to ${collection.name}`, 'success');
@@ -1091,7 +1122,7 @@ export default function App() {
     if (!manualImportUrl.trim()) return;
     const id = `import-${crypto.randomUUID()}`;
     const gif: Gif = { id, title: manualImportTitle.trim() || 'Imported GIF', username: 'manual-import', rating: 'g', images: { fixed_height: { url: manualImportUrl, width: '320', height: '240' }, original: { url: manualImportUrl, width: '320', height: '240' }, fixed_width: { url: manualImportUrl, width: '320', height: '240' }, downsized: { url: manualImportUrl, width: '320', height: '240' } } };
-    const meta: GifMeta = { tags: ['imported'], notes: 'Imported from external URL', addedAt: new Date().toISOString(), useLater: false, imported: true, customSourceUrl: manualImportUrl, collectionIds: [SHARED_COLLECTION_ID] };
+    const meta: GifMeta = { tags: ['imported'], notes: 'Imported from external URL', addedAt: new Date().toISOString(), useLater: false, imported: true, customSourceUrl: manualImportUrl, collectionIds: [SHARED_COLLECTION_ID], searchTerms: [] };
     const sharedIds = [gif.id, ...(workspace.collections.find((item) => item.id === SHARED_COLLECTION_ID)?.gifIds ?? [])];
     setWorkspace((current) => ({ ...current, manualImports: [gif, ...current.manualImports], gifMeta: { ...current.gifMeta, [gif.id]: meta }, collections: current.collections.map((collection) => collection.id === SHARED_COLLECTION_ID ? { ...collection, gifIds: sharedIds } : collection) }));
     setManualImportUrl('');
@@ -1175,7 +1206,7 @@ export default function App() {
 
       <main className="max-w-7xl mx-auto px-4 py-6 space-y-6">
         {(workspaceLoading || favouritesLoading) && <div className="masonry-grid">{Array.from({ length: 8 }).map((_, index) => <SkeletonCard key={index} height={[160, 200, 140, 220, 180][index % 5]} />)}</div>}
-        {!workspaceLoading && page === 'discover' && <DiscoverPage currentLabel={currentLabel} analytics={analytics} loading={loading} gifs={gifs} hasMore={hasMore} loadingMore={loadingMore} fetchGifs={fetchGifs} searchQuery={searchQuery} activeCategory={activeCategory} offset={offset} addHistory={addHistory} isFavourited={isFavourited} handleToggleFavourite={handleToggleFavourite} workspace={workspace} isQueued={isQueued} handleQueueToggle={handleQueueToggle} recentHistory={recentHistory} manualImportTitle={manualImportTitle} setManualImportTitle={setManualImportTitle} manualImportUrl={manualImportUrl} setManualImportUrl={setManualImportUrl} importExternalGif={importExternalGif} />}
+        {!workspaceLoading && page === 'discover' && <DiscoverPage currentLabel={currentLabel} analytics={analytics} loading={loading} gifs={gifs} hasMore={hasMore} loadingMore={loadingMore} fetchGifs={fetchGifs} searchQuery={searchQuery} activeCategory={activeCategory} offset={offset} addHistory={addHistory} isFavourited={isFavourited} handleToggleFavourite={handleToggleFavouriteFromDiscover} workspace={workspace} isQueued={isQueued} handleQueueToggle={handleQueueToggle} recentHistory={recentHistory} manualImportTitle={manualImportTitle} setManualImportTitle={setManualImportTitle} manualImportUrl={manualImportUrl} setManualImportUrl={setManualImportUrl} importExternalGif={importExternalGif} />}
         {!workspaceLoading && page === 'favourites' && <FavouritesPage favouriteSearch={favouriteSearch} setFavouriteSearch={setFavouriteSearch} filterCollectionId={filterCollectionId} setFilterCollectionId={setFilterCollectionId} filterTag={filterTag} setFilterTag={setFilterTag} filterRating={filterRating} setFilterRating={setFilterRating} filterUsername={filterUsername} setFilterUsername={setFilterUsername} workspace={workspace} allTags={allTags} allUsernames={allUsernames} filteredFavourites={filteredFavourites} queuedGifs={queuedGifs} handleClearAll={handleClearAll} addHistory={addHistory} handleToggleFavourite={handleToggleFavourite} isQueued={isQueued} handleQueueToggle={handleQueueToggle} addGifToCollection={addGifToCollection} newCollectionName={newCollectionName} setNewCollectionName={setNewCollectionName} newCollectionDescription={newCollectionDescription} setNewCollectionDescription={setNewCollectionDescription} newCollectionPublic={newCollectionPublic} setNewCollectionPublic={setNewCollectionPublic} addCollection={addCollection} updateCollectionVisibility={updateCollectionVisibility} reorderQueue={reorderQueue} handleCopy={handleCopy} />}
         {!workspaceLoading && page === 'toolbox' && <ToolboxPage publicCollections={publicCollections} workspace={workspace} analytics={analytics} updateProfileField={updateProfileField} setPage={navigateToPage} handleCopy={handleCopy} />}
         {!workspaceLoading && page === 'users' && <UsersPage userSearch={userSearch} setUserSearch={setUserSearch} userSearchLoading={userSearchLoading} searchUsers={searchUsers} userResults={userResults} selectedUserProfile={selectedUserProfile} selectedUserCollections={selectedUserCollections} selectedUserFavourites={selectedUserFavourites} selectedUserLoading={selectedUserLoading} loadPublicUser={loadPublicUser} />}
@@ -1183,7 +1214,7 @@ export default function App() {
       </main>
 
       <footer className="border-t border-[var(--border)] py-6 mt-10"><div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2"><p className="text-[var(--text-faint)] text-xs">GIF data provided by <span className="text-[var(--text-muted)] font-semibold">GIPHY</span></p><p className="text-[var(--text-faint)] text-xs">Profiles, collections, metadata, history, public sharing, and queue persist through Supabase</p></div></footer>
-      {selectedGif && <GifModal gif={selectedGif} onClose={() => setSelectedGif(null)} onCopy={handleCopy} isFavourited={isFavourited(selectedGif.id)} onToggleFavourite={handleToggleFavourite} note={workspace.gifMeta[selectedGif.id]?.notes ?? ''} tags={workspace.gifMeta[selectedGif.id]?.tags ?? []} onUpdateNote={(gif, note) => { void updateMeta(gif, (meta) => ({ ...meta, notes: note })); }} onAddTag={(gif, tag) => { void updateMeta(gif, (meta) => ({ ...meta, tags: Array.from(new Set([...meta.tags, tag.trim().toLowerCase()])) })); }} />}
+      {selectedGif && <GifModal gif={selectedGif} onClose={() => setSelectedGif(null)} onCopy={handleCopy} isFavourited={isFavourited(selectedGif.id)} onToggleFavourite={(gif) => { void handleToggleFavourite(gif, page === 'discover' ? currentSearchTerm : undefined); }} note={workspace.gifMeta[selectedGif.id]?.notes ?? ''} tags={workspace.gifMeta[selectedGif.id]?.tags ?? []} searchTerms={workspace.gifMeta[selectedGif.id]?.searchTerms ?? []} onUpdateNote={(gif, note) => { void updateMeta(gif, (meta) => ({ ...meta, notes: note })); }} onAddTag={(gif, tag) => { void updateMeta(gif, (meta) => ({ ...meta, tags: Array.from(new Set([...meta.tags, tag.trim().toLowerCase()])) })); }} onRemoveSearchTerm={(gif, term) => { void updateMeta(gif, (meta) => ({ ...meta, searchTerms: (meta.searchTerms ?? []).filter((value) => value !== term) })); }} />}
       <Toast {...toast} />
     </div>
   );
