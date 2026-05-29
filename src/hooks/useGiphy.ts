@@ -6,6 +6,7 @@ const GIPHY_KEYS = [
   import.meta.env.VITE_GIPHY_API_KEY_2 as string | undefined,
   import.meta.env.VITE_GIPHY_API_KEY_3 as string | undefined,
   import.meta.env.VITE_GIPHY_API_KEY_4 as string | undefined,
+  import.meta.env.VITE_GIPHY_API_KEY_5 as string | undefined,
   import.meta.env.VITE_GIPHY_API_KEY as string | undefined,
 ].filter((key): key is string => Boolean(key));
 console.log("Loaded GIPHY_KEYS:", GIPHY_KEYS);
