@@ -24,7 +24,7 @@ interface FavouritesPageProps {
   filteredFavourites: Gif[];
   queuedGifs: Gif[];
   handleClearAll: () => void;
-  addHistory: (gif: Gif) => void;
+  onOpenGif: (gif: Gif) => void;
   handleToggleFavourite: (gif: Gif) => void;
   isQueued: (id: string) => boolean;
   handleQueueToggle: (gif: Gif) => void;
@@ -60,7 +60,7 @@ export function FavouritesPage({
   filteredFavourites,
   queuedGifs,
   handleClearAll,
-  addHistory,
+  onOpenGif,
   handleToggleFavourite,
   isQueued,
   handleQueueToggle,
@@ -170,7 +170,7 @@ export function FavouritesPage({
                   key={gif.id}
                   gif={gif}
                   index={index}
-                  onSelect={addHistory}
+                  onSelect={onOpenGif}
                   isFavourited={true}
                   onToggleFavourite={handleToggleFavourite}
                   notePreview={workspace.gifMeta[gif.id]?.notes}

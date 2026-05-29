@@ -945,7 +945,7 @@ export default function App() {
             filteredFavourites={filteredFavourites}
             queuedGifs={queuedGifs}
             handleClearAll={handleClearAll}
-            addHistory={handleSelectGif}
+            onOpenGif={setSelectedGif}
             handleToggleFavourite={handleToggleFavourite}
             isQueued={isQueued}
             handleQueueToggle={handleQueueToggle}
