@@ -1,10 +1,10 @@
-import { Collection, Page, SectionCard } from '../App';
+import { Collection, Page, SectionCard, ProfileSettings } from '../App';
 
 interface ToolboxPageProps {
   publicCollections: Collection[];
-  workspace: { history: unknown[]; profile: { helperMode: boolean } };
+  workspace: { history: unknown[]; profile: ProfileSettings };
   analytics: { importedCount: number; queued: number };
-  updateProfileField: (nextProfile: { helperMode: boolean } & Record<string, unknown>) => void;
+  updateProfileField: (nextProfile: ProfileSettings) => void;
   setPage: (page: Page) => void;
   handleCopy: (text: string, label?: string) => void;
 }

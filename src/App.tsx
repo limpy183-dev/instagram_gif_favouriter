@@ -14,7 +14,6 @@ const GIPHY_KEYS = [
   import.meta.env.VITE_GIPHY_API_KEY_3 as string | undefined,
   import.meta.env.VITE_GIPHY_API_KEY_4 as string | undefined,
   import.meta.env.VITE_GIPHY_API_KEY as string | undefined,
-  'xi7X7aEg9CRosfoYoIJ1JmztL9J9lNBX',
 ].filter((key): key is string => Boolean(key));
 const LIMIT = 24;
 const LEGACY_FAVOURITES_KEY = 'gif_studio_favourites';
@@ -255,9 +254,6 @@ function HeartIcon({ filled }: { filled?: boolean }) {
 function InstagramIcon() {
   return <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5" /><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" /><line x1="17.5" y1="6.5" x2="17.51" y2="6.5" /></svg>;
 }
-function TrashIcon() {
-  return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>;
-}
 function DiscoverIcon() {
   return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" /></svg>;
 }
@@ -331,7 +327,7 @@ export function GifCard({ gif, index, onSelect, isFavourited, onToggleFavourite,
   );
 }
 
-function GifModal({ gif, onClose, onCopy, isFavourited, onToggleFavourite, note, tags, searchTerms, onUpdateNote, onAddTag, onRemoveSearchTerm }: {
+function GifModal({ gif, onClose, onCopy, isFavourited, onToggleFavourite, note, tags, searchTerms, onUpdateNote, onAddTag, onRemoveSearchTerm, collections, onAddGifToCollection, onRemoveGifFromCollection }: {
   gif: Gif | null;
   onClose: () => void;
   onCopy: (text: string, label?: string) => void;
@@ -343,6 +339,9 @@ function GifModal({ gif, onClose, onCopy, isFavourited, onToggleFavourite, note,
   onUpdateNote: (gif: Gif, note: string) => void;
   onAddTag: (gif: Gif, tag: string) => void;
   onRemoveSearchTerm: (gif: Gif, term: string) => void;
+  collections: Collection[];
+  onAddGifToCollection: (gif: Gif, collectionId: string) => void;
+  onRemoveGifFromCollection: (gif: Gif, collectionId: string) => void;
 }) {
   const [draftTag, setDraftTag] = useState('');
   const backdropRef = useRef<HTMLDivElement>(null);
@@ -392,6 +391,28 @@ function GifModal({ gif, onClose, onCopy, isFavourited, onToggleFavourite, note,
               <button onClick={() => onCopy(searchName, 'Name')} className="tool-btn"><InstagramIcon />Copy Name</button>
               <button onClick={() => onCopy(gif.images.fixed_height.url, 'URL')} className="tool-btn"><CopyIcon />Copy URL</button>
               <a href={gif.images.original.url} target="_blank" rel="noopener noreferrer" className="tool-btn no-underline"><DownloadIcon />Open GIF</a>
+            </div>
+            <div className="mb-4">
+              <label className="block text-[var(--text-muted)] text-xs font-semibold mb-1.5">Collections</label>
+              <div className="flex flex-wrap gap-2">
+                {collections
+                  .filter((c) => c.id !== 'all-favourites' && c.id !== 'queue')
+                  .map((collection) => {
+                    const inCollection = collection.gifIds.includes(gif.id);
+                    return (
+                      <button
+                        key={collection.id}
+                        onClick={() => inCollection ? onRemoveGifFromCollection(gif, collection.id) : onAddGifToCollection(gif, collection.id)}
+                        className={`chip flex items-center gap-1.5 text-xs font-medium transition-colors ${inCollection ? 'text-white border-[var(--accent)] bg-[var(--accent-soft)]' : 'text-zinc-400 hover:text-white'}`}
+                      >
+                        <span>{inCollection ? '✓' : '+'} {collection.name}</span>
+                      </button>
+                    );
+                  })}
+                {collections.filter((c) => c.id !== 'all-favourites' && c.id !== 'queue').length === 0 && (
+                  <span className="text-xs text-zinc-500 italic">No custom collections created yet.</span>
+                )}
+              </div>
             </div>
             <label className="block text-[var(--text-muted)] text-xs font-semibold mb-1.5">Notes</label>
             <textarea value={note} onChange={(e) => onUpdateNote(gif, e.target.value)} className="field min-h-24 resize-none" />
@@ -511,6 +532,7 @@ export default function App() {
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
   const [retryingSync, setRetryingSync] = useState(false);
   const [migrationChecked, setMigrationChecked] = useState(false);
+  const [avatarError, setAvatarError] = useState(false);
   const [newCollectionName, setNewCollectionName] = useState('');
   const [newCollectionDescription, setNewCollectionDescription] = useState('');
   const [newCollectionPublic, setNewCollectionPublic] = useState(false);
@@ -678,6 +700,14 @@ export default function App() {
       manualImports: (cachedWorkspace?.manualImports as Gif[] | undefined) ?? favouritesRef.current.filter((gif) => gif.username === 'manual-import'),
     };
 
+    // Sync and initialize local queue IDs from gifMeta flags if empty
+    const queueCollection = nextWorkspace.collections.find(c => c.id === QUEUE_COLLECTION_ID);
+    if (queueCollection && queueCollection.gifIds.length === 0) {
+      queueCollection.gifIds = Object.entries(gifMeta)
+        .filter(([_, meta]) => meta.useLater)
+        .map(([id]) => id);
+    }
+
     setWorkspace(nextWorkspace);
     localStorage.setItem(WORKSPACE_CACHE_KEY, JSON.stringify(nextWorkspace));
     if (!initialLandingAppliedRef.current) {
@@ -704,7 +734,7 @@ export default function App() {
   }, [user]);
 
   const saveCollection = useCallback(async (collection: Collection) => {
-    if (!user || [DEFAULT_COLLECTION_ID, QUEUE_COLLECTION_ID].includes(collection.id)) return;
+    if (!user || collection.id === DEFAULT_COLLECTION_ID) return;
     await supabase.from('collections').upsert({ id: collection.id, user_id: user.id, name: collection.name, description: collection.description, color: collection.color, is_public: collection.isPublic }, { onConflict: 'id' });
     await supabase.from('collection_items').delete().eq('user_id', user.id).eq('collection_id', collection.id);
     if (collection.gifIds.length > 0) await supabase.from('collection_items').insert(collection.gifIds.map((gifId, index) => ({ collection_id: collection.id, user_id: user.id, gif_id: gifId, position: index })));
@@ -861,9 +891,10 @@ export default function App() {
 
   useEffect(() => { loadFavourites(); }, [loadFavourites]);
   useEffect(() => { if (user) loadWorkspace(); }, [user, loadWorkspace]);
+  useEffect(() => { setAvatarError(false); }, [workspace.profile.avatarUrl]);
 
   useEffect(() => {
-    if (!user || !migrationChecked || favourites.length > 0) return;
+    if (!user || !migrationChecked) return;
     if (localStorage.getItem(MIGRATION_FLAG_KEY) === 'true') return;
     let legacyFavourites: Gif[] = [];
     try {
@@ -877,14 +908,19 @@ export default function App() {
       localStorage.setItem(MIGRATION_FLAG_KEY, 'true');
       return;
     }
-    void supabase.from('favourites').upsert(legacyFavourites.map((gif) => ({ user_id: user.id, gif_id: gif.id, gif_data: gif })), { onConflict: 'user_id,gif_id' }).then(({ error }) => {
+    const newLegacyFavourites = legacyFavourites.filter((legacy) => !favourites.some((fav) => fav.id === legacy.id));
+    if (newLegacyFavourites.length === 0) {
+      localStorage.setItem(MIGRATION_FLAG_KEY, 'true');
+      return;
+    }
+    void supabase.from('favourites').upsert(newLegacyFavourites.map((gif) => ({ user_id: user.id, gif_id: gif.id, gif_data: gif })), { onConflict: 'user_id,gif_id' }).then(({ error }) => {
       if (error) {
         showToast('Failed to migrate local favourites.', 'error');
         return;
       }
-      setFavourites(legacyFavourites);
+      setFavourites((current) => [...current, ...newLegacyFavourites]);
       localStorage.setItem(MIGRATION_FLAG_KEY, 'true');
-      showToast(`Migrated ${legacyFavourites.length} local favourites`, 'success');
+      showToast(`Migrated ${newLegacyFavourites.length} local favourites`, 'success');
     });
   }, [user, migrationChecked, favourites]);
 
@@ -1116,6 +1152,29 @@ export default function App() {
     showToast(`Added to ${collection.name}`, 'success');
   };
 
+  const removeGifFromCollection = async (gif: Gif, collectionId: string) => {
+    const collection = workspace.collections.find((item) => item.id === collectionId);
+    if (!collection) return;
+    const nextGifIds = collection.gifIds.filter((id) => id !== gif.id);
+    const nextCollectionIds = (workspace.gifMeta[gif.id]?.collectionIds ?? []).filter((id) => id !== collectionId);
+    setWorkspace((current) => ({
+      ...current,
+      collections: current.collections.map((item) => item.id === collectionId ? { ...item, gifIds: nextGifIds } : item),
+      gifMeta: current.gifMeta[gif.id]
+        ? {
+            ...current.gifMeta,
+            [gif.id]: {
+              ...current.gifMeta[gif.id],
+              collectionIds: nextCollectionIds,
+            },
+          }
+        : current.gifMeta,
+    }));
+    await syncCollection(collectionId, nextGifIds);
+    await updateCollectionIds(gif.id, nextCollectionIds);
+    showToast(`Removed from ${collection.name}`, 'info');
+  };
+
   const reorderQueue = async (direction: 'up' | 'down', gifId: string) => {
     const queue = workspace.collections.find((item) => item.id === QUEUE_COLLECTION_ID);
     if (!queue) return;
@@ -1146,13 +1205,22 @@ export default function App() {
 
   const handleClearAll = async () => {
     if (!user || favourites.length === 0) return;
-    const { error } = await supabase.from('favourites').delete().eq('user_id', user.id);
-    if (error) {
-      showToast('Failed to clear favourites.', 'error');
+    const [favRes, itemsRes, metaRes] = await Promise.all([
+      supabase.from('favourites').delete().eq('user_id', user.id),
+      supabase.from('collection_items').delete().eq('user_id', user.id),
+      supabase.from('gif_metadata').delete().eq('user_id', user.id),
+    ]);
+    if (favRes.error || itemsRes.error || metaRes.error) {
+      showToast('Failed to clear favourites from database.', 'error');
       return;
     }
     setFavourites([]);
-    showToast('All favourites cleared', 'info');
+    setWorkspace((current) => ({
+      ...current,
+      collections: current.collections.map((collection) => ({ ...collection, gifIds: [] })),
+      gifMeta: {},
+    }));
+    showToast('All favourites and collection mappings cleared', 'info');
   };
 
   const handleLogout = async () => {
@@ -1203,7 +1271,7 @@ export default function App() {
                 {(['discover', 'favourites', 'toolbox', 'users', 'profile'] as Page[]).map((item) => <button key={item} onClick={() => navigateToPage(item)} className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all duration-300 ${page === item ? 'text-white shadow-lg' : 'text-[var(--text-muted)] hover:text-white hover:bg-white/5'}`} style={page === item ? { background: 'var(--accent)', boxShadow: '0 6px 18px -8px var(--accent-glow)' } : undefined}>{item === 'discover' && <DiscoverIcon />}{item === 'favourites' && <FavouriteNavIcon />}{item === 'users' && <UsersIcon />}<span className="capitalize">{item}</span></button>)}
               </nav>
               <div className="flex items-center gap-3 bg-[var(--bg-elevated)] border border-[var(--border)] rounded-2xl px-3 py-2.5 min-w-[240px] max-w-full transition-colors hover:border-[var(--border-strong)]">
-                <div className="w-10 h-10 rounded-full border border-[var(--border-strong)] overflow-hidden flex items-center justify-center text-xs font-bold text-white" style={{ background: 'var(--accent-soft)' }}>{workspace.profile.avatarUrl ? <img src={workspace.profile.avatarUrl} alt="avatar" className="w-full h-full object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} /> : (workspace.profile.displayName || user.email || 'U').slice(0, 2).toUpperCase()}</div>
+                <div className="w-10 h-10 rounded-full border border-[var(--border-strong)] overflow-hidden flex items-center justify-center text-xs font-bold text-white" style={{ background: 'var(--accent-soft)' }}>{workspace.profile.avatarUrl && !avatarError ? <img src={workspace.profile.avatarUrl} alt="avatar" className="w-full h-full object-cover" onError={() => setAvatarError(true)} /> : (workspace.profile.displayName || user.email || 'U').slice(0, 2).toUpperCase()}</div>
                 <div className="min-w-0"><p className="text-white text-sm font-semibold truncate">{workspace.profile.displayName || user.email || 'Signed in'}</p><p className="text-[var(--text-faint)] text-xs truncate">{user.email ?? 'Supabase account'}</p></div>
                 <button onClick={handleLogout} className="ml-auto flex items-center gap-2 text-xs text-[var(--text-muted)] hover:text-white bg-white/5 hover:bg-white/10 px-3 py-2 rounded-xl transition-all duration-200"><LogoutIcon /><span className="hidden sm:inline">Logout</span></button>
               </div>
@@ -1218,14 +1286,14 @@ export default function App() {
       <main className="max-w-7xl mx-auto px-4 py-6 space-y-6">
         {(workspaceLoading || favouritesLoading) && <div className="masonry-grid">{Array.from({ length: 8 }).map((_, index) => <SkeletonCard key={index} height={[160, 200, 140, 220, 180][index % 5]} />)}</div>}
         {!workspaceLoading && page === 'discover' && <DiscoverPage currentLabel={currentLabel} analytics={analytics} loading={loading} gifs={gifs} hasMore={hasMore} loadingMore={loadingMore} fetchGifs={fetchGifs} searchQuery={searchQuery} activeCategory={activeCategory} offset={offset} addHistory={addHistory} isFavourited={isFavourited} handleToggleFavourite={handleToggleFavouriteFromDiscover} workspace={workspace} isQueued={isQueued} handleQueueToggle={handleQueueToggle} recentHistory={recentHistory} manualImportTitle={manualImportTitle} setManualImportTitle={setManualImportTitle} manualImportUrl={manualImportUrl} setManualImportUrl={setManualImportUrl} importExternalGif={importExternalGif} />}
-        {!workspaceLoading && page === 'favourites' && <FavouritesPage favouriteSearch={favouriteSearch} setFavouriteSearch={setFavouriteSearch} filterCollectionId={filterCollectionId} setFilterCollectionId={setFilterCollectionId} filterTag={filterTag} setFilterTag={setFilterTag} filterRating={filterRating} setFilterRating={setFilterRating} filterUsername={filterUsername} setFilterUsername={setFilterUsername} workspace={workspace} allTags={allTags} allUsernames={allUsernames} filteredFavourites={filteredFavourites} queuedGifs={queuedGifs} handleClearAll={handleClearAll} addHistory={addHistory} handleToggleFavourite={handleToggleFavourite} isQueued={isQueued} handleQueueToggle={handleQueueToggle} addGifToCollection={addGifToCollection} newCollectionName={newCollectionName} setNewCollectionName={setNewCollectionName} newCollectionDescription={newCollectionDescription} setNewCollectionDescription={setNewCollectionDescription} newCollectionPublic={newCollectionPublic} setNewCollectionPublic={setNewCollectionPublic} addCollection={addCollection} updateCollectionVisibility={updateCollectionVisibility} reorderQueue={reorderQueue} handleCopy={handleCopy} />}
+        {!workspaceLoading && page === 'favourites' && <FavouritesPage favouriteSearch={favouriteSearch} setFavouriteSearch={setFavouriteSearch} filterCollectionId={filterCollectionId} setFilterCollectionId={setFilterCollectionId} filterTag={filterTag} setFilterTag={setFilterTag} filterRating={filterRating} setFilterRating={setFilterRating} filterUsername={filterUsername} setFilterUsername={setFilterUsername} workspace={workspace} allTags={allTags} allUsernames={allUsernames} filteredFavourites={filteredFavourites} queuedGifs={queuedGifs} handleClearAll={handleClearAll} addHistory={addHistory} handleToggleFavourite={handleToggleFavourite} isQueued={isQueued} handleQueueToggle={handleQueueToggle} newCollectionName={newCollectionName} setNewCollectionName={setNewCollectionName} newCollectionDescription={newCollectionDescription} setNewCollectionDescription={setNewCollectionDescription} newCollectionPublic={newCollectionPublic} setNewCollectionPublic={setNewCollectionPublic} addCollection={addCollection} updateCollectionVisibility={updateCollectionVisibility} reorderQueue={reorderQueue} handleCopy={handleCopy} />}
         {!workspaceLoading && page === 'toolbox' && <ToolboxPage publicCollections={publicCollections} workspace={workspace} analytics={analytics} updateProfileField={updateProfileField} setPage={navigateToPage} handleCopy={handleCopy} />}
         {!workspaceLoading && page === 'users' && <UsersPage userSearch={userSearch} setUserSearch={setUserSearch} userSearchLoading={userSearchLoading} searchUsers={searchUsers} userResults={userResults} selectedUserProfile={selectedUserProfile} selectedUserCollections={selectedUserCollections} selectedUserFavourites={selectedUserFavourites} selectedUserLoading={selectedUserLoading} loadPublicUser={loadPublicUser} />}
         {!workspaceLoading && page === 'profile' && <ProfilePage workspace={workspace} updateProfileField={updateProfileField} user={user} gifMap={gifMap} giphyUsage={giphyUsage} />}
       </main>
 
       <footer className="border-t border-[var(--border)] py-6 mt-10"><div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2"><p className="text-[var(--text-faint)] text-xs">GIF data provided by <span className="text-[var(--text-muted)] font-semibold">GIPHY</span></p><p className="text-[var(--text-faint)] text-xs">Profiles, collections, metadata, history, public sharing, and queue persist through Supabase</p></div></footer>
-      {selectedGif && <GifModal gif={selectedGif} onClose={() => setSelectedGif(null)} onCopy={handleCopy} isFavourited={isFavourited(selectedGif.id)} onToggleFavourite={(gif) => { void handleToggleFavourite(gif, page === 'discover' ? currentSearchTerm : undefined); }} note={workspace.gifMeta[selectedGif.id]?.notes ?? ''} tags={workspace.gifMeta[selectedGif.id]?.tags ?? []} searchTerms={workspace.gifMeta[selectedGif.id]?.searchTerms ?? []} onUpdateNote={(gif, note) => { void updateMeta(gif, (meta) => ({ ...meta, notes: note })); }} onAddTag={(gif, tag) => { void updateMeta(gif, (meta) => ({ ...meta, tags: Array.from(new Set([...meta.tags, tag.trim().toLowerCase()])) })); }} onRemoveSearchTerm={(gif, term) => { void updateMeta(gif, (meta) => ({ ...meta, searchTerms: (meta.searchTerms ?? []).filter((value) => value !== term) })); }} />}
+      {selectedGif && <GifModal gif={selectedGif} onClose={() => setSelectedGif(null)} onCopy={handleCopy} isFavourited={isFavourited(selectedGif.id)} onToggleFavourite={(gif) => { void handleToggleFavourite(gif, page === 'discover' ? currentSearchTerm : undefined); }} note={workspace.gifMeta[selectedGif.id]?.notes ?? ''} tags={workspace.gifMeta[selectedGif.id]?.tags ?? []} searchTerms={workspace.gifMeta[selectedGif.id]?.searchTerms ?? []} onUpdateNote={(gif, note) => { void updateMeta(gif, (meta) => ({ ...meta, notes: note })); }} onAddTag={(gif, tag) => { void updateMeta(gif, (meta) => ({ ...meta, tags: Array.from(new Set([...meta.tags, tag.trim().toLowerCase()])) })); }} onRemoveSearchTerm={(gif, term) => { void updateMeta(gif, (meta) => ({ ...meta, searchTerms: (meta.searchTerms ?? []).filter((value) => value !== term) })); }} collections={workspace.collections} onAddGifToCollection={addGifToCollection} onRemoveGifFromCollection={removeGifFromCollection} />}
       <Toast {...toast} />
     </div>
   );

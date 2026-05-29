@@ -21,7 +21,6 @@ interface FavouritesPageProps {
   handleToggleFavourite: (gif: Gif) => void;
   isQueued: (id: string) => boolean;
   handleQueueToggle: (gif: Gif) => void;
-  addGifToCollection: (gif: Gif, collectionId: string) => void;
   newCollectionName: string;
   setNewCollectionName: (value: string) => void;
   newCollectionDescription: string;
@@ -34,7 +33,7 @@ interface FavouritesPageProps {
   handleCopy: (text: string, label?: string) => void;
 }
 
-export function FavouritesPage({ favouriteSearch, setFavouriteSearch, filterCollectionId, setFilterCollectionId, filterTag, setFilterTag, filterRating, setFilterRating, filterUsername, setFilterUsername, workspace, allTags, allUsernames, filteredFavourites, queuedGifs, handleClearAll, addHistory, handleToggleFavourite, isQueued, handleQueueToggle, addGifToCollection, newCollectionName, setNewCollectionName, newCollectionDescription, setNewCollectionDescription, newCollectionPublic, setNewCollectionPublic, addCollection, updateCollectionVisibility, reorderQueue, handleCopy }: FavouritesPageProps) {
+export function FavouritesPage({ favouriteSearch, setFavouriteSearch, filterCollectionId, setFilterCollectionId, filterTag, setFilterTag, filterRating, setFilterRating, filterUsername, setFilterUsername, workspace, allTags, allUsernames, filteredFavourites, queuedGifs, handleClearAll, addHistory, handleToggleFavourite, isQueued, handleQueueToggle, newCollectionName, setNewCollectionName, newCollectionDescription, setNewCollectionDescription, newCollectionPublic, setNewCollectionPublic, addCollection, updateCollectionVisibility, reorderQueue, handleCopy }: Omit<FavouritesPageProps, 'addGifToCollection'>) {
   return (
     <SectionCard title="Favourite Library" subtitle="Collections, tags, smart filters, and queue all sync through Supabase." action={<button onClick={handleClearAll} className="secondary-btn">Clear all</button>}>
       <div className="grid lg:grid-cols-[1fr_18rem] gap-6">
