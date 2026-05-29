@@ -22,17 +22,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Get initial session
+    // Avoid updating session state when only the access token refreshed —
+    // Supabase fires onAuthStateChange on tab focus, and a new session object
+    // reference cascades through useEffect deps and triggers full data reloads.
+    const applySession = (newSession: Session | null) =>
+      setSession((current) => (current?.user?.id === newSession?.user?.id ? current : newSession));
+
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
+      applySession(session);
       setLoading(false);
     }).catch(() => {
       setLoading(false);
     });
 
-    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
+      applySession(session);
       setLoading(false);
     });
 

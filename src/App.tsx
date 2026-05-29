@@ -473,7 +473,7 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [favouriteSearch, setFavouriteSearch] = useState('');
   const [filterTag, setFilterTag] = useState('all');
-  const [filterCollectionId, setFilterCollectionId] = useState(DEFAULT_COLLECTION_ID);
+  const [filterCollectionId, setFilterCollectionId] = useState('all');
   const [filterRating, setFilterRating] = useState('all');
   const [filterUsername, setFilterUsername] = useState('all');
   const [moodFilter, setMoodFilter] = useState<MoodFilter>('all');
@@ -512,8 +512,12 @@ export default function App() {
   const [giphyUsage, setGiphyUsage] = useState<GiphyUsage>(readGiphyUsage());
   const inputRef = useRef<HTMLInputElement>(null);
   const syncPanelRef = useRef<HTMLDivElement>(null);
+  const favouritesRef = useRef<Gif[]>([]);
+  const initialLandingAppliedRef = useRef(false);
 
   const route = useMemo(parseHashRoute, [window.location.hash]);
+
+  useEffect(() => { favouritesRef.current = favourites; }, [favourites]);
 
   const showToast = (message: string, type: ToastProps['type'] = 'success') => {
     setToast({ message, type, visible: true });
@@ -593,7 +597,10 @@ export default function App() {
         profile: cachedWorkspace.profile ? { ...defaultWorkspace.profile, ...cachedWorkspace.profile } : defaultWorkspace.profile,
         manualImports: (cachedWorkspace.manualImports as Gif[] | undefined) ?? [],
       });
-      setPage(getPreferredPage(route, (cachedWorkspace.profile?.landingPage as Page | undefined) ?? defaultWorkspace.profile.landingPage));
+      if (!initialLandingAppliedRef.current) {
+        setPage(getPreferredPage(parseHashRoute(), (cachedWorkspace.profile?.landingPage as Page | undefined) ?? defaultWorkspace.profile.landingPage));
+        initialLandingAppliedRef.current = true;
+      }
       setWorkspaceOffline(true);
       setWorkspaceLoading(false);
       return;
@@ -650,16 +657,19 @@ export default function App() {
         publicProfile: cachedWorkspace?.profile?.publicProfile ?? defaultWorkspace.profile.publicProfile,
         publicFavourites: cachedWorkspace?.profile?.publicFavourites ?? defaultWorkspace.profile.publicFavourites,
       },
-      manualImports: (cachedWorkspace?.manualImports as Gif[] | undefined) ?? favourites.filter((gif) => gif.username === 'manual-import'),
+      manualImports: (cachedWorkspace?.manualImports as Gif[] | undefined) ?? favouritesRef.current.filter((gif) => gif.username === 'manual-import'),
     };
 
     setWorkspace(nextWorkspace);
     localStorage.setItem(WORKSPACE_CACHE_KEY, JSON.stringify(nextWorkspace));
-    setPage(getPreferredPage(route, nextWorkspace.profile.landingPage));
+    if (!initialLandingAppliedRef.current) {
+      setPage(getPreferredPage(parseHashRoute(), nextWorkspace.profile.landingPage));
+      initialLandingAppliedRef.current = true;
+    }
     setWorkspaceOffline(false);
     setLastSyncAt(new Date().toISOString());
     setWorkspaceLoading(false);
-  }, [user, favourites, route]);
+  }, [user]);
 
   const saveProfile = useCallback(async (profile: ProfileSettings) => {
     if (!user) return;
