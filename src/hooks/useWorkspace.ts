@@ -172,16 +172,17 @@ export function useWorkspace(
 
       const { error } = await supabase.from("profiles").upsert(payload, { onConflict: "id" });
 
-      if (error && (error.message?.includes("public_profile") || error.message?.includes("public_favourites"))) {
-        console.warn("Failed to upsert profiles with privacy columns, falling back...", error);
-        delete payload.public_profile;
-        delete payload.public_favourites;
-        const { error: fallbackError } = await supabase.from("profiles").upsert(payload, { onConflict: "id" });
+      if (error) {
+        console.warn("Failed to upsert profiles with all fields, trying core fields fallback...", error);
+        const corePayload = {
+          id: user.id,
+          display_name: nextProfile.displayName,
+          avatar_url: normalizeAvatarUrl(nextProfile.avatarUrl),
+        };
+        const { error: fallbackError } = await supabase.from("profiles").upsert(corePayload, { onConflict: "id" });
         if (fallbackError) {
-          console.error("Fallback saveProfile failed:", fallbackError);
+          console.error("Core profiles upsert fallback failed:", fallbackError);
         }
-      } else if (error) {
-        console.error("saveProfile failed:", error);
       }
     },
     [user]
@@ -267,20 +268,35 @@ export function useWorkspace(
         .eq("id", user.id)
         .maybeSingle();
 
-      if (
-        res.error &&
-        (res.error.message?.includes("public_profile") ||
-          res.error.message?.includes("public_favourites"))
-      ) {
+      if (res.error) {
         console.warn(
-          "Profiles columns public_profile/public_favourites not found, falling back...",
+          "Primary profile fetch failed (missing database columns), falling back to core fields...",
           res.error
         );
-        return supabase
+        const fallbackRes = await supabase
           .from("profiles")
-          .select("display_name, avatar_url, accent, landing_page, helper_mode, offline_cache")
+          .select("display_name, avatar_url")
           .eq("id", user.id)
           .maybeSingle();
+
+        if (fallbackRes.error) {
+          console.error("Core profiles fallback query failed:", fallbackRes.error);
+          return { data: null, error: fallbackRes.error };
+        }
+        
+        return {
+          data: {
+            display_name: fallbackRes.data?.display_name ?? null,
+            avatar_url: fallbackRes.data?.avatar_url ?? null,
+            accent: null,
+            landing_page: null,
+            helper_mode: false,
+            offline_cache: true,
+            public_profile: true,
+            public_favourites: true
+          },
+          error: null
+        };
       }
       return res;
     };
