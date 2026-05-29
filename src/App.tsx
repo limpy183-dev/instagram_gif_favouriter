@@ -367,36 +367,57 @@ export default function App() {
 
     // Bug A Fix: Read and populate selectedUserProfile favourites if allowed
     if (publicFavouritesVal) {
-      const [{ data: favouritesRes }, { data: metadataRes }] = await Promise.all([
-        supabase
+      // 1. Fetch public favourites list
+      try {
+        const { data: favouritesRes, error: favouritesError } = await supabase
           .from("favourites")
           .select("gif_id, gif_data")
           .eq("user_id", userId)
-          .order("created_at", { ascending: false }),
-        supabase
+          .order("created_at", { ascending: false });
+
+        if (favouritesError) {
+          console.error("Failed to load public favourites from Supabase:", favouritesError);
+          setSelectedUserFavourites([]);
+        } else {
+          setSelectedUserFavourites((favouritesRes ?? []).map((row) => row.gif_data));
+        }
+      } catch (err) {
+        console.error("Error executing public favourites query:", err);
+        setSelectedUserFavourites([]);
+      }
+
+      // 2. Fetch public favourites metadata (tags, notes) separately and gracefully
+      try {
+        const { data: metadataRes, error: metadataError } = await supabase
           .from("gif_metadata")
           .select("gif_id, notes, tags, use_later, custom_source_url, search_terms, updated_at")
-          .eq("user_id", userId)
-      ]);
+          .eq("user_id", userId);
 
-      setSelectedUserFavourites((favouritesRes ?? []).map((row) => row.gif_data));
-
-      const metadataMap: Record<string, GifMeta> = {};
-      if (metadataRes) {
-        metadataRes.forEach((row) => {
-          metadataMap[row.gif_id] = {
-            tags: row.tags ?? [],
-            notes: row.notes ?? "",
-            addedAt: row.updated_at,
-            useLater: row.use_later,
-            imported: false,
-            customSourceUrl: row.custom_source_url ?? undefined,
-            collectionIds: [],
-            searchTerms: row.search_terms ?? [],
-          };
-        });
+        if (metadataError) {
+          console.warn("Public user metadata query returned an error (expected if RLS is restricted):", metadataError);
+          setSelectedUserMetadata({});
+        } else {
+          const metadataMap: Record<string, GifMeta> = {};
+          if (metadataRes) {
+            metadataRes.forEach((row) => {
+              metadataMap[row.gif_id] = {
+                tags: row.tags ?? [],
+                notes: row.notes ?? "",
+                addedAt: row.updated_at,
+                useLater: row.use_later,
+                imported: false,
+                customSourceUrl: row.custom_source_url ?? undefined,
+                collectionIds: [],
+                searchTerms: row.search_terms ?? [],
+              };
+            });
+          }
+          setSelectedUserMetadata(metadataMap);
+        }
+      } catch (err) {
+        console.warn("Exception during public user metadata query:", err);
+        setSelectedUserMetadata({});
       }
-      setSelectedUserMetadata(metadataMap);
     } else {
       setSelectedUserFavourites([]);
       setSelectedUserMetadata({});
