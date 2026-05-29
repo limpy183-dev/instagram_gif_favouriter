@@ -159,7 +159,7 @@ export function useWorkspace(
       const nextProfile = { ...profile, avatarUrl: profile.avatarUrl.trim() };
       
       const payload: any = {
-        id: user.id,
+        user_id: user.id,
         display_name: nextProfile.displayName,
         avatar_url: normalizeAvatarUrl(nextProfile.avatarUrl),
         accent: nextProfile.accent,
@@ -170,16 +170,16 @@ export function useWorkspace(
         public_favourites: nextProfile.publicFavourites,
       };
 
-      const { error } = await supabase.from("profiles").upsert(payload, { onConflict: "id" });
+      const { error } = await supabase.from("profiles").upsert(payload, { onConflict: "user_id" });
 
       if (error) {
         console.warn("Failed to upsert profiles with all fields, trying core fields fallback...", error);
         const corePayload = {
-          id: user.id,
+          user_id: user.id,
           display_name: nextProfile.displayName,
           avatar_url: normalizeAvatarUrl(nextProfile.avatarUrl),
         };
-        const { error: fallbackError } = await supabase.from("profiles").upsert(corePayload, { onConflict: "id" });
+        const { error: fallbackError } = await supabase.from("profiles").upsert(corePayload, { onConflict: "user_id" });
         if (fallbackError) {
           console.error("Core profiles upsert fallback failed:", fallbackError);
         }
@@ -265,7 +265,7 @@ export function useWorkspace(
         .select(
           "display_name, avatar_url, accent, landing_page, helper_mode, offline_cache, public_profile, public_favourites"
         )
-        .eq("id", user.id)
+        .eq("user_id", user.id)
         .maybeSingle();
 
       if (res.error) {
@@ -276,7 +276,7 @@ export function useWorkspace(
         const fallbackRes = await supabase
           .from("profiles")
           .select("display_name, avatar_url")
-          .eq("id", user.id)
+          .eq("user_id", user.id)
           .maybeSingle();
 
         if (fallbackRes.error) {

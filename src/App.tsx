@@ -161,10 +161,15 @@ export default function App() {
     
     let queryBuilder = supabase
       .from("profiles")
-      .select("user_id:id, display_name, avatar_url, accent, public_profile, public_favourites");
+      .select("user_id, display_name, avatar_url, accent, public_profile, public_favourites");
 
     if (trimmed) {
-      queryBuilder = queryBuilder.or(`display_name.ilike.%${trimmed}%,id.ilike.%${trimmed}%`);
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(trimmed);
+      if (isUuid) {
+        queryBuilder = queryBuilder.or(`display_name.ilike.%${trimmed}%,user_id.eq.${trimmed}`);
+      } else {
+        queryBuilder = queryBuilder.ilike("display_name", `%${trimmed}%`);
+      }
     }
 
     // Filter by public_profile = true or public_profile IS NULL (by default they are public)
@@ -176,10 +181,15 @@ export default function App() {
       console.warn("Profiles query failed, falling back to query without privacy columns...", error);
       let fallbackQuery = supabase
         .from("profiles")
-        .select("user_id:id, display_name, avatar_url, accent");
+        .select("user_id, display_name, avatar_url, accent");
 
       if (trimmed) {
-        fallbackQuery = fallbackQuery.or(`display_name.ilike.%${trimmed}%,id.ilike.%${trimmed}%`);
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(trimmed);
+        if (isUuid) {
+          fallbackQuery = fallbackQuery.or(`display_name.ilike.%${trimmed}%,user_id.eq.${trimmed}`);
+        } else {
+          fallbackQuery = fallbackQuery.ilike("display_name", `%${trimmed}%`);
+        }
       }
 
       const { data: fallbackData, error: fallbackError } = await fallbackQuery.limit(20);
