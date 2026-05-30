@@ -7,6 +7,15 @@ export interface GifImage {
   url: string;
   width: string;
   height: string;
+  // Animated WebP variant — much smaller than the GIF; present on Giphy results.
+  webp?: string;
+}
+
+// Static preview frames returned by Giphy (e.g. fixed_height_still).
+export interface GifStillImage {
+  url: string;
+  width: string;
+  height: string;
 }
 
 export interface Gif {
@@ -14,8 +23,10 @@ export interface Gif {
   title: string;
   images: {
     fixed_height: GifImage;
+    fixed_height_still?: GifStillImage;
     original: GifImage;
     fixed_width: GifImage;
+    fixed_width_still?: GifStillImage;
     downsized: GifImage;
   };
   username: string;

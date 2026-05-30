@@ -9,8 +9,11 @@ const GIPHY_KEYS = [
   import.meta.env.VITE_GIPHY_API_KEY_5 as string | undefined,
   import.meta.env.VITE_GIPHY_API_KEY as string | undefined,
 ].filter((key): key is string => Boolean(key));
-// Log to console so developer can verify that keys are being injected from secrets in production
-console.log("Loaded GIPHY_KEYS:", GIPHY_KEYS);
+// Never log the keys themselves — they ship in the client bundle and would be
+// trivially harvestable from the console. In dev, only surface how many loaded.
+if (import.meta.env.DEV) {
+  console.info(`[giphy] ${GIPHY_KEYS.length} API key(s) loaded`);
+}
 
 const LIMIT = 24;
 const GIPHY_USAGE_KEY = "gif_studio_giphy_usage";

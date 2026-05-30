@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Gif, Collection } from "../types";
 import { CloseIcon, HeartIcon, XIcon, InstagramIcon, CopyIcon, DownloadIcon } from "./Icons";
+import { getFullUrl } from "../utils/gifImage";
 
 interface GifModalProps {
   gif: Gif | null;

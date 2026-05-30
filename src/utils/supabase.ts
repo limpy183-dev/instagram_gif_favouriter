@@ -18,6 +18,8 @@ export const supabase = createClient(
   supabaseAnonKey || 'placeholder-anon-key'
 );
 
-if (typeof window !== 'undefined') {
+// Expose the client globally only in development for debugging. Shipping a
+// global `window.supabase` to production needlessly widens the attack surface.
+if (import.meta.env.DEV && typeof window !== 'undefined') {
   (window as any).supabase = supabase;
 }
