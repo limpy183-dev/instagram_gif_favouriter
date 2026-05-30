@@ -3,6 +3,8 @@ import { GifCard } from "../components/GifCard";
 import { SectionCard } from "../components/CardComponents";
 import { CollectionsPanel } from "../components/favourites/CollectionsPanel";
 import { QueuePanel } from "../components/favourites/QueuePanel";
+import { MasonryGrid } from "../components/MasonryGrid";
+import { useProgressiveReveal } from "../hooks/useProgressiveReveal";
 
 interface FavouritesPageProps {
   favouriteSearch: string;
@@ -75,6 +77,7 @@ export function FavouritesPage({
   reorderQueue,
   handleCopy,
 }: FavouritesPageProps) {
+  const { visibleCount, sentinelRef } = useProgressiveReveal(filteredFavourites.length);
   return (
     <SectionCard
       title="Favourite Library"
@@ -164,21 +167,25 @@ export function FavouritesPage({
             </div>
           </div>
           {filteredFavourites.length > 0 ? (
-            <div className="masonry-grid">
-              {filteredFavourites.map((gif, index) => (
-                <GifCard
-                  key={gif.id}
-                  gif={gif}
-                  index={index}
-                  onSelect={onOpenGif}
-                  isFavourited={true}
-                  onToggleFavourite={handleToggleFavourite}
-                  notePreview={workspace.gifMeta[gif.id]?.notes}
-                  isQueued={isQueued(gif.id)}
-                  onQueueToggle={handleQueueToggle}
-                />
-              ))}
-            </div>
+            <>
+              <MasonryGrid
+                items={filteredFavourites.slice(0, visibleCount)}
+                renderItem={(gif, index) => (
+                  <GifCard
+                    key={gif.id}
+                    gif={gif}
+                    index={index}
+                    onSelect={onOpenGif}
+                    isFavourited={true}
+                    onToggleFavourite={handleToggleFavourite}
+                    notePreview={workspace.gifMeta[gif.id]?.notes}
+                    isQueued={isQueued(gif.id)}
+                    onQueueToggle={handleQueueToggle}
+                  />
+                )}
+              />
+              <div ref={sentinelRef} className="h-1" />
+            </>
           ) : (
             <div className="empty-state">
               <div className="text-5xl">💔</div>

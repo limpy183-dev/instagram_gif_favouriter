@@ -2,6 +2,8 @@ import { useState, useMemo } from "react";
 import type { Collection, Gif, PublicUserProfile, GifMeta, FavouriteSortOption } from "../../types";
 import { SectionCard } from "../CardComponents";
 import { GifCard } from "../GifCard";
+import { MasonryGrid } from "../MasonryGrid";
+import { useProgressiveReveal } from "../../hooks/useProgressiveReveal";
 
 interface PublicProfileViewProps {
   selectedUserProfile: PublicUserProfile | null;
@@ -122,6 +124,8 @@ export function PublicProfileView({
     sortOption,
     shuffleSeed,
   ]);
+
+  const { visibleCount, sentinelRef } = useProgressiveReveal(filteredFavourites.length);
 
   return (
     <SectionCard
@@ -267,21 +271,26 @@ export function PublicProfileView({
                   </div>
 
                   {filteredFavourites.length > 0 ? (
-                    <div className={selectedUserPublicView ? "masonry-grid" : "masonry-grid-compact"}>
-                      {filteredFavourites.map((gif, index) => (
-                        <GifCard
-                          key={gif.id}
-                          gif={gif}
-                          index={index}
-                          onSelect={onSelectGif ?? (() => {})}
-                          isFavourited={isFavourited ? isFavourited(gif.id) : false}
-                          onToggleFavourite={onToggleFavourite ?? (() => {})}
-                          notePreview={selectedUserMetadata[gif.id]?.notes}
-                          isQueued={isQueued ? isQueued(gif.id) : false}
-                          onQueueToggle={onQueueToggle ?? (() => {})}
-                        />
-                      ))}
-                    </div>
+                    <>
+                      <MasonryGrid
+                        items={filteredFavourites.slice(0, visibleCount)}
+                        isCompact={!selectedUserPublicView}
+                        renderItem={(gif, index) => (
+                          <GifCard
+                            key={gif.id}
+                            gif={gif}
+                            index={index}
+                            onSelect={onSelectGif ?? (() => {})}
+                            isFavourited={isFavourited ? isFavourited(gif.id) : false}
+                            onToggleFavourite={onToggleFavourite ?? (() => {})}
+                            notePreview={selectedUserMetadata[gif.id]?.notes}
+                            isQueued={isQueued ? isQueued(gif.id) : false}
+                            onQueueToggle={onQueueToggle ?? (() => {})}
+                          />
+                        )}
+                      />
+                      <div ref={sentinelRef} className="h-1" />
+                    </>
                   ) : (
                     <div className="empty-state compact-empty">
                       <div className="text-4xl">💔</div>

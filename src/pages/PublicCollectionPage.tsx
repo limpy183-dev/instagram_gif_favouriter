@@ -1,6 +1,8 @@
 import type { Collection, Gif, ToastProps } from "../types";
 import { SkeletonCard, Toast } from "../components/CardComponents";
 import { GifCard } from "../components/GifCard";
+import { MasonryGrid } from "../components/MasonryGrid";
+import { useProgressiveReveal } from "../hooks/useProgressiveReveal";
 
 interface PublicCollectionPageProps {
   publicCollection: Collection | null;
@@ -15,6 +17,7 @@ export function PublicCollectionPage({
   publicCollectionGifs,
   toast,
 }: PublicCollectionPageProps) {
+  const { visibleCount, sentinelRef } = useProgressiveReveal(publicCollectionGifs.length);
   return (
     <div className="min-h-screen bg-zinc-950 text-white">
       <main className="max-w-6xl mx-auto px-4 py-10 space-y-6">
@@ -28,28 +31,33 @@ export function PublicCollectionPage({
           </a>
         </div>
         {publicCollectionLoading && (
-          <div className="masonry-grid">
-            {Array.from({ length: 8 }).map((_, index) => (
+          <MasonryGrid
+            items={Array.from({ length: 8 })}
+            renderItem={(_, index) => (
               <SkeletonCard key={index} height={[160, 200, 140, 220, 180][index % 5]} />
-            ))}
-          </div>
+            )}
+          />
         )}
         {!publicCollectionLoading && publicCollection && (
-          <div className="masonry-grid">
-            {publicCollectionGifs.map((gif, index) => (
-              <GifCard
-                key={gif.id}
-                gif={gif}
-                index={index}
-                onSelect={() => {}}
-                isFavourited={false}
-                onToggleFavourite={() => {}}
-                notePreview=""
-                isQueued={false}
-                onQueueToggle={() => {}}
-              />
-            ))}
-          </div>
+          <>
+            <MasonryGrid
+              items={publicCollectionGifs.slice(0, visibleCount)}
+              renderItem={(gif, index) => (
+                <GifCard
+                  key={gif.id}
+                  gif={gif}
+                  index={index}
+                  onSelect={() => {}}
+                  isFavourited={false}
+                  onToggleFavourite={() => {}}
+                  notePreview=""
+                  isQueued={false}
+                  onQueueToggle={() => {}}
+                />
+              )}
+            />
+            <div ref={sentinelRef} className="h-1" />
+          </>
         )}
         {!publicCollectionLoading && !publicCollection && (
           <div className="empty-state">

@@ -1,6 +1,7 @@
 import type { Gif, Workspace } from "../types";
 import { GifCard } from "../components/GifCard";
 import { SectionCard } from "../components/CardComponents";
+import { MasonryGrid } from "../components/MasonryGrid";
 
 interface DiscoverPageProps {
   currentLabel: string;
@@ -73,19 +74,21 @@ export function DiscoverPage({
           </div>
         </div>
         {loading && (
-          <div className="masonry-grid">
-            {Array.from({ length: 12 }).map((_, index) => (
+          <MasonryGrid
+            items={Array.from({ length: 12 })}
+            renderItem={(_, index) => (
               <div
                 key={index}
-                className="masonry-item rounded-2xl overflow-hidden shimmer"
+                className="rounded-2xl overflow-hidden shimmer"
                 style={{ height: `${[160, 200, 140, 220, 180][index % 5]}px` }}
               />
-            ))}
-          </div>
+            )}
+          />
         )}
         {!loading && gifs.length > 0 && (
-          <div className="masonry-grid">
-            {gifs.map((gif, index) => (
+          <MasonryGrid
+            items={gifs}
+            renderItem={(gif, index) => (
               <GifCard
                 key={gif.id}
                 gif={gif}
@@ -97,8 +100,8 @@ export function DiscoverPage({
                 isQueued={isQueued(gif.id)}
                 onQueueToggle={handleQueueToggle}
               />
-            ))}
-          </div>
+            )}
+          />
         )}
         {!loading && gifs.length === 0 && (
           <div className="empty-state">

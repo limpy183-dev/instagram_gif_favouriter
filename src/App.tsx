@@ -23,6 +23,7 @@ import { useGiphy } from "./hooks/useGiphy";
 import { useWorkspace } from "./hooks/useWorkspace";
 import { normalizeAvatarUrl } from "./utils/workspaceHelpers";
 import { Toast, SkeletonCard } from "./components/CardComponents";
+import { MasonryGrid } from "./components/MasonryGrid";
 import { GifModal } from "./components/GifModal";
 
 import {
@@ -892,11 +893,12 @@ export default function App() {
         )}
 
         {(workspaceLoading || favouritesLoading) && (
-          <div className="masonry-grid">
-            {Array.from({ length: 8 }).map((_, index) => (
+          <MasonryGrid
+            items={Array.from({ length: 8 })}
+            renderItem={(_, index) => (
               <SkeletonCard key={index} height={[160, 200, 140, 220, 180][index % 5]} />
-            ))}
-          </div>
+            )}
+          />
         )}
         {!workspaceLoading && page === "discover" && (
           <DiscoverPage
