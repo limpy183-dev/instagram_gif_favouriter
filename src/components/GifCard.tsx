@@ -43,7 +43,6 @@ function GifCardComponent({
       <img
         src={previewUrl}
         alt={gif.title}
-        loading="lazy"
         decoding="async"
         className={`w-full rounded-2xl transition-transform duration-300 group-hover:scale-105 block ${
           loaded ? "opacity-100" : "opacity-0 absolute inset-0"
