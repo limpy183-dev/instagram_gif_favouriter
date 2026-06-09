@@ -1,7 +1,7 @@
 import { memo, useState } from "react";
 import type { Gif } from "../types";
 import { HeartIcon } from "./Icons";
-import { getAnimatedPreviewUrl, getStillPreviewUrl } from "../utils/gifImage";
+import { getAnimatedPreviewUrl } from "../utils/gifImage";
 
 interface GifCardProps {
   gif: Gif;
@@ -25,19 +25,12 @@ function GifCardComponent({
   onQueueToggle,
 }: GifCardProps) {
   const [loaded, setLoaded] = useState(false);
-  const [hovered, setHovered] = useState(false);
   const searchName = gif.title?.replace(/\s+GIF$/, "").trim() || "Untitled";
-  const stillUrl = getStillPreviewUrl(gif);
-  const animatedUrl = getAnimatedPreviewUrl(gif);
-  // Show the lightweight still frame by default and only animate on hover, so
-  // a grid of many GIFs doesn't decode dozens of animations at once.
-  const previewUrl = hovered ? animatedUrl : stillUrl;
+  const previewUrl = getAnimatedPreviewUrl(gif);
   return (
     <div
       className="masonry-item gif-card relative rounded-2xl overflow-hidden cursor-pointer group"
       style={{ animationDelay: `${(Math.floor(index / 2) % 6) * 40}ms` }}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
     >
       {!loaded && <div className="shimmer w-full rounded-2xl" style={{ height: "180px" }} />}
       <img

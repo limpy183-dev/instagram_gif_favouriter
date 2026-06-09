@@ -47,8 +47,14 @@ assert.match(
 
 assert.match(
   gifCardSource,
-  /getStillPreviewUrl\(gif\)[\s\S]*getAnimatedPreviewUrl\(gif\)/,
-  "GIF cards should use still thumbnails by default and animated/WebP previews only when needed."
+  /const previewUrl = getAnimatedPreviewUrl\(gif\);/,
+  "GIF cards should start animated/WebP previews immediately."
+);
+
+assert.doesNotMatch(
+  gifCardSource,
+  /hovered|onMouseEnter|onMouseLeave|getStillPreviewUrl/,
+  "GIF card animation should not depend on pointer hover."
 );
 
 for (const [name, source] of [
