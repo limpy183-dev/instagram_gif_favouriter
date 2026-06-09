@@ -29,15 +29,15 @@ function GifCardComponent({
   const previewUrl = getAnimatedPreviewUrl(gif);
   return (
     <div
-      className="masonry-item gif-card relative rounded-2xl overflow-hidden cursor-pointer group"
+      className="masonry-item gif-card relative aspect-square rounded-2xl overflow-hidden cursor-pointer group"
       style={{ animationDelay: `${(Math.floor(index / 2) % 6) * 40}ms` }}
     >
-      {!loaded && <div className="shimmer w-full rounded-2xl" style={{ height: "180px" }} />}
+      {!loaded && <div className="shimmer absolute inset-0 rounded-2xl" />}
       <img
         src={previewUrl}
         alt={gif.title}
         decoding="async"
-        className={`w-full rounded-2xl transition-transform duration-300 group-hover:scale-105 block ${
+        className={`w-full h-full object-cover rounded-2xl transition-transform duration-300 group-hover:scale-105 block ${
           loaded ? "opacity-100" : "opacity-0 absolute inset-0"
         }`}
         onLoad={() => setLoaded(true)}
