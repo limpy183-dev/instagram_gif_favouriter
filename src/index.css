@@ -97,7 +97,6 @@ textarea:focus-visible {
 }
 @media (min-width: 640px) { .masonry-grid { grid-template-columns: repeat(3, 1fr); } }
 @media (min-width: 1024px) { .masonry-grid { grid-template-columns: repeat(4, 1fr); } }
-@media (min-width: 1280px) { .masonry-grid { grid-template-columns: repeat(5, 1fr); } }
 
 .masonry-grid-compact {
   display: grid;
